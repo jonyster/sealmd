@@ -62,9 +62,10 @@ In **Claude Code** (or Cursor / Codex / Copilot), just say:
 /sealmd spec.md
 ```
 
-`/seal` is the only command most people need. **New doc** → it asks the owner,
+`/sealmd` is the only command most people need. **New doc** → it asks the owner,
 your role, and how to share (Slack/Teams/Email via MCP, or git), then opens the
-live review. **Existing doc** → it just opens it.
+live review. **Existing doc** → it just opens it. (`/seal-new` and `/seal-open`
+are the explicit versions.)
 
 Power users — drive the CLI directly:
 
