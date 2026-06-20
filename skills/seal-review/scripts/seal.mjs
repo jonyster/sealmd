@@ -151,7 +151,7 @@ function upsertSummaryRole(doc, roleObj) {
 const KEY_ORDER = {
   document: ['kind', 'seal_schema_version', 'normalization_version', 'source', 'title', 'owner', 'notify', 'quorum', 'created_at'],
   state: ['kind', 'status', 'content_hash', 'updated_at'],
-  comment: ['kind', 'id', 'author', 'anchor', 'suggestion', 'mentions', 'body', 'status', 'content_hash', 'created_at', 'thread'],
+  comment: ['kind', 'id', 'author', 'anchor', 'suggestion', 'accepted', 'mentions', 'body', 'status', 'content_hash', 'created_at', 'thread'],
   approval: ['kind', 'id', 'approver', 'decision', 'content_hash', 'note', 'created_at'],
 };
 function canon(kind, obj) {
@@ -525,6 +525,44 @@ function coreSetStatus(doc, { id, status }) {
   writeSidecar(sp, r);
   return { cm, sp, r };
 }
+// Accept a suggestion: apply its replacement to the DOC (doc.md) and resolve it.
+// Edits the markdown file — the content hash changes, anchors re-resolve, and any
+// approvals on the old version go stale (correct: the doc changed).
+function coreAccept(doc, { id }) {
+  const { sp, r } = loadSidecar(doc);
+  const cm = findComment(r, id);
+  if (cm.suggestion == null) throw new Error('not a suggestion');
+  if (!cm.anchor) throw new Error('suggestion has no anchor to replace');
+  const raw = readDoc(doc);
+  const q = cm.anchor.quote;
+  let newRaw;
+  const first = raw.indexOf(q);
+  if (first === -1) throw new Error('could not find the original text in the doc — edit it manually');
+  if (raw.indexOf(q, first + 1) === -1) {
+    newRaw = raw.slice(0, first) + cm.suggestion + raw.slice(first + q.length);
+  } else {
+    // ambiguous: disambiguate with the stored prefix/suffix context
+    const probe = (cm.anchor.prefix || '') + q + (cm.anchor.suffix || '');
+    const at = raw.indexOf(probe);
+    if (at === -1 || raw.indexOf(probe, at + 1) !== -1) throw new Error('the text appears multiple times — accept by editing manually');
+    newRaw = raw.slice(0, at) + (cm.anchor.prefix || '') + cm.suggestion + (cm.anchor.suffix || '') + raw.slice(at + probe.length);
+  }
+  writeFileSync(doc, newRaw);
+  cm.status = 'resolved';
+  cm.accepted = true;
+  writeSidecar(sp, r);
+  return { cm, sp, r };
+}
+
+// Owner edit: overwrite doc.md with new markdown (e.g. from the Markdown editor).
+function coreSaveDoc(doc, { markdown }) {
+  if (typeof markdown !== 'string' || !markdown.trim()) throw new Error('refusing to write empty markdown');
+  const tmp = doc + '.tmp';
+  writeFileSync(tmp, markdown);
+  renameSync(tmp, doc);
+  return { content_hash: contentHash(markdown) };
+}
+
 function coreSubmit(doc) {
   const { sp, r } = loadSidecar(doc);
   const h = liveHash(doc);
@@ -572,6 +610,12 @@ function cmdSubmit() {
   const { r, content_hash } = coreSubmit(doc);
   const html = regen(doc, r); maybeOpen(html);
   out({ ok: true, action: 'submit', status: 'in_review', content_hash, html });
+}
+function cmdAccept() {
+  const doc = docPath();
+  const { cm, r } = coreAccept(doc, { id: arg('id') });
+  const html = regen(doc, r); maybeOpen(html);
+  out({ ok: true, action: 'accept', id: cm.id, content_hash: liveHash(doc), html });
 }
 function cmdDecision(decision) {
   const doc = docPath();
@@ -703,9 +747,20 @@ function cmdServe() {
           const { cm } = coreReply(doc, body); result = { ok: true, id: cm.id };
           const ev = { type: 'reply', id: cm.id, author: body.author, body: body.body, doc };
           emitEvent(ev); notify(ev);
-        } else if (url.pathname === '/api/resolve') {
+        } else if (url.pathname === '/api/resolve' || url.pathname === '/api/dismiss') {
           const { cm } = coreSetStatus(doc, { id: body.id, status: 'resolved' }); result = { ok: true, id: cm.id };
-          emitEvent({ type: 'resolve', id: cm.id, doc });
+          emitEvent({ type: 'dismiss', id: cm.id, doc });
+        } else if (url.pathname === '/api/reopen') {
+          const { cm } = coreSetStatus(doc, { id: body.id, status: 'open' }); result = { ok: true, id: cm.id };
+          emitEvent({ type: 'reopen', id: cm.id, doc });
+        } else if (url.pathname === '/api/accept') {
+          const { cm } = coreAccept(doc, { id: body.id });
+          result = { ok: true, id: cm.id, content_hash: liveHash(doc) };
+          emitEvent({ type: 'accept', id: cm.id, doc, hint: 'a suggestion was applied to the doc — content hash changed' });
+        } else if (url.pathname === '/api/doc') {
+          const { content_hash } = coreSaveDoc(doc, { markdown: body.markdown });
+          result = { ok: true, content_hash };
+          emitEvent({ type: 'doc_edited', doc, content_hash, hint: 'owner edited the document' });
         } else if (url.pathname === '/api/summary') {
           // request a role-tailored summary; if not present, ask the AI console (event) to generate it
           const roles = readSummaryRoles(doc);
@@ -827,8 +882,9 @@ function run() {
       case 'status': cmdStatus(); break;
       case 'comment': cmdComment(); break;
       case 'reply': cmdReply(); break;
-      case 'resolve': cmdSetStatus('resolved'); break;
+      case 'resolve': case 'dismiss': cmdSetStatus('resolved'); break;
       case 'reopen': cmdSetStatus('open'); break;
+      case 'accept': cmdAccept(); break;
       case 'submit': cmdSubmit(); break;
       case 'approve': cmdDecision('approved'); break;
       case 'request': cmdDecision('changes_requested'); break;

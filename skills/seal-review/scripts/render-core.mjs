@@ -252,6 +252,13 @@ function avInitials(name) { return escapeHtml(String(name || '?').split(/\s+/).m
 // ---- one comment / suggestion card -----------------------------------------
 // data-anchor + data-quote drive the client-side wrapFirst() highlight and
 // the bidirectional focus. Suggestions use the production .sg card shape.
+function cardActions(c) {
+  // owner actions (shown only in serve mode via body.can-edit). Accept applies a
+  // suggestion to the doc; Dismiss resolves the comment.
+  if (c.status === 'resolved') return c.accepted ? '<div class="cacc">✓ applied to the document</div>' : '';
+  const accept = c.suggestion != null ? `<button class="btn primary tiny" data-accept="${escapeHtml(c.id)}">Accept</button>` : '';
+  return `<div class="cactions owneract">${accept}<button class="btn ghost tiny" data-dismiss="${escapeHtml(c.id)}">Dismiss</button></div>`;
+}
 function card(c) {
   const isSug = c.suggestion != null;
   const disposed = c.status === 'resolved';
@@ -273,7 +280,7 @@ function card(c) {
   ${old ? `<div class="sg-q">${renderInline(old)}</div>` : ''}
   <div class="sg-prop"><span class="sg-arrow">→</span>${renderInline(c.suggestion)}</div>
   ${c.body ? `<div class="sg-disp">${renderInline(c.body)}</div>` : ''}
-  ${threadHtml}</div>`;
+  ${threadHtml}${cardActions(c)}</div>`;
   }
 
   const quoted = c.anchor
@@ -283,7 +290,7 @@ function card(c) {
   <div class="chead"><span class="av">${avInitials(c.author)}</span>
     <div style="min-width:0"><div class="who-name">${escapeHtml(c.author)}</div><div class="who-sub">${escapeHtml(c.status)}</div></div>
     <span class="ctype">comment</span></div>
-  ${quoted}<div class="ctext">${renderInline(c.body)}</div>${threadHtml}</div>`;
+  ${quoted}<div class="ctext">${renderInline(c.body)}</div>${threadHtml}${cardActions(c)}</div>`;
 }
 
 function statusBadge(review) {
@@ -698,6 +705,16 @@ export function renderReviewPage({
   .mentionmenu .mh{color:var(--muted);font-size:11px}
   .willnotify{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 7px;font-size:11px;color:var(--muted);align-items:center}
   .willnotify .nchip{background:var(--seal-soft);color:var(--seal-ink);border:1px solid var(--seal-line);border-radius:var(--r-pill);padding:1px 8px;font-weight:600}
+  /* owner actions */
+  .owneract{display:none}
+  body.can-edit .owneract{display:inline-flex}
+  .cactions{gap:6px;margin-top:9px}
+  body.can-edit .cactions{display:flex}
+  .cacc{font-size:11px;color:var(--ins);margin-top:8px;font-weight:600}
+  .editbar{position:fixed;left:0;right:0;bottom:0;z-index:110;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel-2);border-top:1px solid var(--line-strong);box-shadow:var(--shadow-pop)}
+  .editbar[hidden]{display:none}
+  .editbar .ebnote{font-size:12.5px;color:var(--muted)}
+  .docmd.editing{outline:2px solid var(--seal);outline-offset:2px;background:#0d1018;cursor:text;min-height:50vh}
   .sc-email{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;outline:none;color:var(--ink);background:var(--input-fill);margin-bottom:7px}
   .sc-email:focus{border-color:var(--seal);box-shadow:0 0 0 2px var(--seal-soft)}
   .sc-email.autofilled{border-color:var(--seal-line);background:var(--seal-soft)}
@@ -764,6 +781,7 @@ export function renderReviewPage({
         <span class="badge ${badge.cls}">${badge.label}</span>
       </div>
       <span class="spacer"></span>
+      <button class="ghost owneract" id="editBtn" title="Edit the document (writes doc.md)">✎ Edit</button>
       <button class="ghost" id="shareBtn" title="Share this review">↗ Share</button>
       <button class="ghost" id="themeBtn" title="Toggle theme">◐</button>
       <span class="src" title="zero network calls">🔒 offline</span>
@@ -814,7 +832,7 @@ export function renderReviewPage({
             <button class="cq-x" id="cmtQuoteClear" type="button" aria-label="Remove pin">&times;</button></div>
           <textarea id="cmtInput" placeholder="Add a comment on this document… (type @ to tag)" rows="2"></textarea>
           <input id="cmtAuthor" placeholder="Your name">
-          <input id="cmtEmail" class="sc-email" type="text" placeholder="Notify by email — auto-fills when you @tag" hidden>
+          <input id="cmtEmail" class="sc-email" type="text" placeholder="Notify by email — auto-fills when you @tag">
           <div class="cmt-compose-row">
             <span class="spacer"></span>
             <button class="btn ghost tiny" id="cmtCancel" type="button">Cancel</button>
@@ -855,7 +873,7 @@ export function renderReviewPage({
   <div class="sc-quote" id="scQuote"></div>
   <input id="scSuggest" placeholder="Proposed replacement text" style="display:none">
   <textarea id="scInput" placeholder="Add comment… (type @ to tag)"></textarea>
-  <input id="scEmail" class="sc-email" type="text" placeholder="Notify by email — auto-fills when you @tag" hidden>
+  <input id="scEmail" class="sc-email" type="text" placeholder="Notify by email — auto-fills when you @tag">
   <pre class="sc-out" id="scOut"></pre>
   <div class="sc-row">
     <span class="spacer"></span>
@@ -863,6 +881,7 @@ export function renderReviewPage({
     <button class="btn primary tiny" id="scPost">Comment</button>
   </div>
 </div>
+<div class="editbar" id="editBar" hidden><span class="ebnote">Editing Markdown — <b>Save</b> writes <code>doc.md</code> (content hash changes, approvals re-open)</span><span class="spacer"></span><button class="btn ghost tiny" id="editCancel">Cancel</button><button class="btn primary tiny" id="editSave">Save to doc.md</button></div>
 <div class="mentionmenu" id="mentionMenu" hidden></div>
 <div class="sharedlg" id="shareDlg" hidden>
   <div class="sharecard">
@@ -1224,12 +1243,11 @@ function updateNotify(ta){
   const names=(ta.value.match(/@([a-z0-9._-]+)/gi)||[]).map(s=>s.slice(1).toLowerCase());
   const hit=PEOPLE.filter(p=>names.some(n=>p.name.toLowerCase()===n||(p.handle||'').toLowerCase()===n||p.name.toLowerCase().split(' ')[0]===n));
   if(box)box.innerHTML=hit.length?'will notify: '+hit.map(p=>'<span class="nchip">@'+escapeText(p.handle||p.name)+'</span>').join(''):'';
-  // auto-fill the email field with the tagged people's emails
-  const ef=emailFieldFor(ta);if(ef){
-    const emails=hit.map(p=>p.email).filter(Boolean);
-    if(emails.length){ef.hidden=false;
-      if(!ef.dataset.touched){ef.value=[...new Set(emails)].join(', ');ef.classList.add('autofilled');}
-    }else if(!ef.dataset.touched&&!ef.value){ef.hidden=true;ef.classList.remove('autofilled');}
+  // auto-fill the always-visible email field with the tagged people's emails
+  const ef=emailFieldFor(ta);if(ef&&!ef.dataset.touched){
+    const emails=[...new Set(hit.map(p=>p.email).filter(Boolean))];
+    if(emails.length){ef.value=emails.join(', ');ef.classList.add('autofilled');}
+    else{ef.value='';ef.classList.remove('autofilled');}
   }
 }
 function attachMentions(ta){
@@ -1294,6 +1312,27 @@ function renderShare(){
   };
 }
 document.getElementById('shareBtn').onclick=()=>{renderShare();shareDlg.hidden=false;};
+
+// ---- owner actions: accept suggestion / dismiss comment / edit the doc ----
+if(isServe)document.body.classList.add('can-edit');
+async function ownerPost(url,payload,msg){
+  try{const j=await(await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)})).json();
+    if(j&&j.ok){toast(msg);try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>location.reload(),600);}
+    else toast('Error: '+((j&&j.error)||'failed'));}
+  catch(e){toast('Server error: '+e.message);}
+}
+document.addEventListener('click',e=>{
+  const ac=e.target.closest('[data-accept]');if(ac){e.preventDefault();e.stopPropagation();ownerPost('/api/accept',{id:ac.dataset.accept},'Suggestion applied to doc.md');return;}
+  const ds=e.target.closest('[data-dismiss]');if(ds){e.preventDefault();e.stopPropagation();ownerPost('/api/dismiss',{id:ds.dataset.dismiss},'Comment dismissed');return;}
+},true);
+// edit the document (raw Markdown) — Save writes doc.md
+const editBtn=document.getElementById('editBtn'),editBar=document.getElementById('editBar'),docMdEl=document.getElementById('docMd');
+if(editBtn)editBtn.onclick=()=>{setView('md');docMdEl.contentEditable='true';docMdEl.classList.add('editing');editBar.hidden=false;docMdEl.focus();};
+var editCancelB=document.getElementById('editCancel');if(editCancelB)editCancelB.onclick=()=>location.reload();
+var editSaveB=document.getElementById('editSave');if(editSaveB)editSaveB.onclick=async()=>{
+  const md=docMdEl.innerText;if(!md.trim()){toast('Empty — not saving');return;}
+  await ownerPost('/api/doc',{markdown:md},'Saved to doc.md');
+};
 
 // ---- restore view / pane / role / scroll after reload ----
 try{

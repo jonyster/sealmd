@@ -1,0 +1,24 @@
+---
+description: seal-local — fully-local document review (doc.md + doc.seal.md). Use when reviewing/commenting/approving a Markdown PRD/spec/RFC, accepting suggestions, or running a live review.
+globs:
+alwaysApply: false
+---
+
+# seal-local (Cursor)
+
+A zero-dependency Node CLI for local document review. Full guide: see `AGENTS.md`
+at the repo root — follow it. Quick reference:
+
+Run the engine:
+`node skills/seal-review/scripts/seal.mjs <command> --in <doc.md>`
+
+Common commands:
+- `init --in doc.md` — create the `doc.seal.md` sidecar.
+- `comment --in doc.md --body "…" [--anchor "exact span"] [--suggest "replacement"] [--mention a,b]`
+- `accept --in doc.md --id ID` — apply a suggestion to `doc.md`.
+- `dismiss --in doc.md --id ID` — resolve a comment.
+- `render --in doc.md --open` — build the review page.
+- `serve --in doc.md --open` — live review server (run it in the background and
+  react to the `SEAL_EVENT` lines it prints — see AGENTS.md "live loop").
+
+Always commit `doc.md` + `doc.seal.md`; `*.review.html` is generated and gitignored.

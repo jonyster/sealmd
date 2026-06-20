@@ -24,6 +24,19 @@ one-line human summary above each block. You can read it in any Markdown viewer
 polished view: a Summary / Full doc / Markdown toggle, each comment highlighted
 on its quoted span, and a comments rail.
 
+## Works with any AI coding agent
+
+The engine is one zero-dependency Node CLI, so the same tool drives **Claude Code,
+Cursor, OpenAI Codex, and GitHub Copilot** — each just reads its own instruction
+file, all pointing at the same canonical guide:
+
+- `AGENTS.md` — canonical, tool-agnostic (Codex / Cursor / Amp / others)
+- `.cursor/rules/seal-review.mdc` — Cursor
+- `.github/copilot-instructions.md` — GitHub Copilot
+- `skills/seal-review/SKILL.md` + `.claude-plugin/` — Claude Code plugin
+
+Any agent runs `node skills/seal-review/scripts/seal.mjs <command> --in doc.md`.
+
 ## Install
 
 ```
