@@ -7,7 +7,9 @@ Open the existing review for the `.md` in `$ARGUMENTS` (or the doc the user mean
 `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (call it `seal`).
 
 - Run **`seal start DOC`** as a **background task** and give the user the
-  `http://127.0.0.1:…` URL. No questions.
+  `http://127.0.0.1:…` URL. No questions. **Open the LIVE server — never a static
+  `*.review.html`.** This is the sealmd plugin, NOT the hosted "seal" skill; don't
+  use any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
 - While it's open, watch for `summary_request` events (or run `seal pending --in
   DOC`) and generate any role the user types — or they hit the page's **Copy
   `/seal-role`** button.

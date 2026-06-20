@@ -2,9 +2,12 @@
 description: Set up a NEW local document review — guided: confirm doc → owner → your role → sharing (install MCP if needed) → open it.
 ---
 
-Run the **new-doc** seal flow on the `.md` in `$ARGUMENTS` (or ask which doc).
-Engine: `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (call it `seal`).
+Run the **new-doc** sealmd flow on the `.md` in `$ARGUMENTS` (or ask which doc).
+Engine (use ONLY this): `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (call it `seal`).
 Be conversational — one question at a time, sensible defaults.
+**Always open the LIVE local server (`seal start`, background task) — never a
+static `*.review.html`.** This is the sealmd plugin, NOT the hosted "seal" skill;
+ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
 
 1. **Pick the doc** — offer **both** sources:
    - **Local file (browse)** — list the project's `.md` files (glob `**/*.md`) for

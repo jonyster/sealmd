@@ -2,12 +2,23 @@
 description: The one command for local document review. `seal new <doc>` guides owner → your role → sharing (MCP if needed) → opens it. `seal open <doc>` opens an existing review. No sub-command = auto-detect.
 ---
 
-You are running the **seal** review flow. `$ARGUMENTS` may contain a doc path.
+You are running the **sealmd** review flow. `$ARGUMENTS` may contain a doc path.
 Be conversational — ask one question at a time, use sensible defaults, never dump
 the whole list at once.
 
-ENGINE: `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"`
-(fallback: the `scripts/` dir next to the skill). Call it `seal` below.
+ENGINE (use ONLY this — the sealmd plugin's CLI):
+`node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (fallback: the
+`scripts/` dir next to this command's skill). Call it `seal` below.
+
+**CRITICAL:**
+- Always open the **LIVE local server** (`seal start` / `seal serve`, run as a
+  **background task**) and give the user the `http://127.0.0.1:…` URL. **Never**
+  produce a static `*.review.html` as the result, and never run `render` as the
+  primary action.
+- This is **not** the hosted "seal" skill. Do **not** use any other `seal`
+  command/skill that renders a static page or mentions `seal publish` /
+  `SEAL_API_TOKEN`. If you can't resolve `${CLAUDE_PLUGIN_ROOT}`, find this
+  plugin's `seal.mjs` on disk — don't fall back to a different tool.
 
 ## Step 0 — parse intent + find the doc
 
