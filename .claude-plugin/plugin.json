@@ -1,7 +1,7 @@
 {
   "name": "sealmd",
-  "version": "0.2.0",
-  "description": "Fully-local, file-based document review. Renders doc.md + a doc.seal.md sidecar (comments, review state) into a polished offline review page with content-hash drift detection. Zero server, zero network.",
+  "version": "0.3.0",
+  "description": "Fully-local, file-based document review. Renders doc.md + a doc.seal.md sidecar (comments, review state) into a polished offline review page with content-hash drift detection. Local-first: the review page makes no external requests; Slack/Teams/email notifications are opt-in.",
   "author": { "name": "Jonathan Birger", "url": "https://github.com/jonyster" },
   "keywords": ["review", "comments", "markdown", "local-first", "offline", "prd", "spec"],
   "license": "MIT"

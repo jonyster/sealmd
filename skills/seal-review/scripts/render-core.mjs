@@ -739,6 +739,8 @@ export function renderReviewPage({
   .sharecard .opt b{font-size:13px}.sharecard .opt p{margin:3px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
   .sharecard .opt code{font-size:11.5px;background:var(--panel);padding:1px 5px;border-radius:4px;word-break:break-all}
   .sharecard .opt .btn{margin-top:8px}
+  .sharecard .opt .filepath{margin:6px 0 0}.sharecard .opt .filepath code{display:block;padding:5px 7px;word-break:break-all}
+  .sharecard .opt .filebtns{display:flex;gap:6px;flex-wrap:wrap}
   .selcompose textarea:focus,.selcompose input:focus{border-color:var(--seal);box-shadow:0 0 0 2px var(--seal-soft)}
   .sc-out{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px;font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);white-space:pre-wrap;word-break:break-all;margin-bottom:7px;display:none}
   .sc-row{display:flex;justify-content:flex-end;gap:7px;margin-top:4px;align-items:center}
@@ -1332,8 +1334,10 @@ function renderShare(){
     if(!isServe){toast('This page is already the file');return;}
     ex.textContent='Exporting…';
     try{const j=await(await fetch('/api/share',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channels:[]})})).json();
-      document.getElementById('shareFileRow').innerHTML='<p><code>'+escapeText(j.file)+'</code></p><button class="btn ghost tiny" id="shareCopy">Copy path</button>';
-      document.getElementById('shareCopy').onclick=()=>navigator.clipboard.writeText(j.file).then(()=>toast('Path copied'));}
+      const p=j.absPath||j.file;
+      document.getElementById('shareFileRow').innerHTML='<p class="filepath"><code>'+escapeText(p)+'</code></p><div class="filebtns"><button class="btn ghost tiny" id="shareReveal">Show file</button><button class="btn ghost tiny" id="shareCopy">Copy path</button></div>';
+      document.getElementById('shareCopy').onclick=()=>navigator.clipboard.writeText(p).then(()=>toast('Path copied'));
+      document.getElementById('shareReveal').onclick=async()=>{try{const rr=await(await fetch('/api/reveal',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json();toast(rr.ok?'Opened in file manager':'Could not open'+(rr.error?': '+rr.error:''));}catch(e){toast('Error: '+e.message);}};}
     catch(e){toast('Error: '+e.message);}
   };
 }

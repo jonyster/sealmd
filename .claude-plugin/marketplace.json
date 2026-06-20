@@ -5,7 +5,7 @@
   "plugins": [
     {
       "name": "sealmd",
-      "description": "Fully-local, file-based document review (doc.md + doc.seal.md). Zero network.",
+      "description": "Local-first, file-based document review (doc.md + doc.seal.md). Opt-in notifications only.",
       "source": "./",
       "category": "productivity"
     }

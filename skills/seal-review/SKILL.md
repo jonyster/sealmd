@@ -1,9 +1,9 @@
 ---
 name: seal-review
-description: Review a Markdown document fully locally — no server, no network. Maintains a doc.seal.md sidecar holding comments and review state next to doc.md, and renders a polished self-contained doc.review.html (Summary / Full doc / Markdown). Use when the user wants to review/comment on a PRD/spec/RFC locally, file or resolve comments, or open the local review page. Triggers: "review this locally", "add a comment", "open the review page", "comment on this spec", "/seal-review". NOT for the hosted/paid publish flow (that is the separate "seal" skill).
+description: Review a Markdown document fully locally — local-first, opt-in notifications only. Maintains a doc.seal.md sidecar holding comments and review state next to doc.md, and renders a polished self-contained doc.review.html (Summary / Full doc / Markdown). Use when the user wants to review/comment on a PRD/spec/RFC locally, file or resolve comments, or open the local review page. Triggers: "review this locally", "add a comment", "open the review page", "comment on this spec", "/seal-review". NOT for the hosted/paid publish flow (that is the separate "seal" skill).
 ---
 
-# seal-review — fully local document review (two files, zero network)
+# seal-review — fully local document review (two files, local-first)
 
 seal-review turns one canonical Markdown file into a reviewable surface using
 **two committed files that live side by side**:
@@ -207,7 +207,8 @@ agent) are the loop** — the plugin gives you the surface and the events:
 
 Because the work (generate summary, share, revise) is just you with the plugin's
 commands + your MCPs, the whole live loop is **self-contained in the plugin** — no
-server of ours, no API keys required. Pre-baked roles and all non-generative
+backend of ours. Notifications (Slack/Teams/email) are opt-in and need a webhook or
+key only if you turn them on. Pre-baked roles and all non-generative
 actions (comment, mention, status, render) work with **no agent in the loop**;
 only a *new typed role* and *MCP share* need you.
 

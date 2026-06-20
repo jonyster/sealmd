@@ -466,6 +466,16 @@ function maybeOpen(htmlFile) {
   try { spawn(cmd[0], cmd[1], { detached: true, stdio: 'ignore' }).unref(); }
   catch { console.error(`could not open; file at ${pathToFileURL(htmlFile).href}`); }
 }
+// Reveal a file in the OS file manager (Finder / Explorer / default), selected
+// where the platform supports it. macOS: `open -R`; Windows: `explorer /select,`;
+// Linux has no portable "select", so open the containing folder.
+function revealInFileManager(file) {
+  let abs = file; try { abs = realpathSync(file); } catch {}
+  const cmd = process.platform === 'darwin' ? ['open', ['-R', abs]]
+    : process.platform === 'win32' ? ['explorer', ['/select,' + abs]]
+    : ['xdg-open', [dirname(abs)]];
+  spawn(cmd[0], cmd[1], { detached: true, stdio: 'ignore' }).unref();
+}
 function out(obj) { console.log(JSON.stringify(obj)); }
 
 // ---- gitignore the derived html on init -----------------------------------
@@ -955,14 +965,23 @@ function cmdServe() {
         const { r } = loadSidecar(doc);
         const outFile = htmlPath(doc);
         writeFileSync(outFile, buildPage(doc, r, { mode: 'static' }), 'utf8');
-        let absUrl = outFile; try { absUrl = pathToFileURL(realpathSync(outFile)).href; } catch {}
+        let absUrl = outFile, absPath = outFile;
+        try { absPath = realpathSync(outFile); absUrl = pathToFileURL(absPath).href; } catch {}
         const channels = Array.isArray(sbody.channels) ? sbody.channels : [];
         if (channels.length) {
           // hand off to the AI console's MCP integrations (github/slack/email)
           emitEvent({ type: 'share_request', channels, to: sbody.to || [], file: outFile, fileUrl: absUrl, doc, title: r.document.title,
             hint: 'share the review file/link via the requested MCP(s) (GitHub gist/PR comment, Slack post, email) to the recipients' });
         }
-        return J(res, 200, { ok: true, file: outFile, fileUrl: absUrl, channels, dispatched: channels.length > 0 });
+        return J(res, 200, { ok: true, file: outFile, absPath, fileUrl: absUrl, channels, dispatched: channels.length > 0 });
+      }
+      // reveal the exported review file in the OS file manager (Finder/Explorer).
+      // Path is recomputed server-side — never taken from the client.
+      if (req.method === 'POST' && url.pathname === '/api/reveal') {
+        const outFile = htmlPath(doc);
+        if (!existsSync(outFile)) return J(res, 404, { ok: false, error: 'file not exported yet' });
+        try { revealInFileManager(outFile); return J(res, 200, { ok: true, file: outFile }); }
+        catch (e) { return J(res, 500, { ok: false, error: String(e.message || e) }); }
       }
       // role-tailored summary: poll for a role (exact or nearest) — generated on demand
       if (req.method === 'GET' && url.pathname === '/api/summary') {

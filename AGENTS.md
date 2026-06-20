@@ -8,7 +8,7 @@ the canonical, tool-agnostic guide; the per-tool files (`.cursor/rules/…`,
 
 ## The model
 
-Two committed files per document, side by side — no server, no network, no keys:
+Two committed files per document, side by side. Local-first: the review page makes no external requests, and Slack/Teams/email notifications are opt-in (off unless you configure a webhook or key):
 
 - `doc.md` — the document under review (you read & write it).
 - `doc.seal.md` — the sidecar: comments, suggestions, approvals, review state, as

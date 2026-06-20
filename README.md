@@ -4,13 +4,13 @@
 
 ### Turn a Markdown file into a sign-off-ready review — **fully local**.
 
-*Two files. Zero servers. Zero network. Works with every AI coding agent.*
+*Two committed files. Local-first — nothing leaves your machine except opt-in notifications. Works with every AI coding agent.*
 
 <br>
 
 [![Zero dependencies](https://img.shields.io/badge/dependencies-0-success)](#)
 [![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)](#)
-[![Local-first](https://img.shields.io/badge/network-zero-blue)](#)
+[![Local-first](https://img.shields.io/badge/network-local--first-blue)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-5266eb)](#)
 
@@ -119,7 +119,7 @@ flowchart TD
     A -->|"share (via MCP)"| X
 ```
 
-A **loopback** server — never public. The page **writes your files**; each action streams a `SEAL_EVENT` to the agent, which writes back tailored summaries and shares via your MCPs. No backend of ours, no keys. Git is the transport between people.
+A **loopback** server — never public. The page **writes your files**; each action streams a `SEAL_EVENT` to the agent, which writes back tailored summaries and shares via your MCPs. No backend of ours; the core review loop needs no keys (only opt-in email/Slack notifications do). Git is the transport between people.
 
 ---
 
@@ -134,7 +134,7 @@ A **loopback** server — never public. The page **writes your files**; each act
 | 🏷️ **@mentions** | Tag people (auto-scraped from the doc); notify via git, Slack, Teams, email. |
 | 🔗 **Share** | GitHub / Slack / Email — gated on the MCPs you actually have connected. |
 | 🌙 **Dark by default** | Calm-paper light + dark, remembers your choice. |
-| 🔒 **Zero network** | The review page makes no external requests. Verifiable, offline, yours. |
+| 🔒 **Local-first** | The rendered review page makes no external requests — verifiable, offline, yours. Slack/Teams/email notifications are **opt-in**: off unless you set a webhook or key. |
 
 ---
 
@@ -145,6 +145,20 @@ A **loopback** server — never public. The page **writes your files**; each act
 **Does not** — verify identity (authors are self-asserted), make the sidecar immutable (it's editable text — `git diff` is the backstop), or guarantee delivery. Those are the hosted `seal publish` boundary.
 
 ---
+
+## Data handling
+
+sealmd runs on your machine and stores everything in your own repo (`doc.md` + `doc.seal.md`). **No telemetry. Nothing is sent to the author or any sealmd service.**
+
+The only outbound network is **opt-in notifications**, off by default:
+
+| Channel | Fires when you set | Data sent | To |
+|---|---|---|---|
+| Slack / Teams | `--slack-webhook` / `--teams-webhook` (or `SEAL_*_WEBHOOK`) | event text (who/what/doc title) | the webhook **you** provide |
+| Email | `SEAL_RESEND_KEY` + `--email-to` | event text | [Resend](https://resend.com) under **your** key |
+| Share / sync | your connected MCP (GitHub, etc.) or local `gh` CLI | what that channel sends | the service **you** connected |
+
+The local review server binds **`127.0.0.1` only** (never a public interface). Webhook URLs and keys live in `*.seal.notify.json`, which is gitignored. Remove the flags/env and the tool makes zero outbound calls.
 
 ## Roadmap
 
