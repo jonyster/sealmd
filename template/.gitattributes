@@ -1,0 +1,4 @@
+# seal-local: keep the doc and its sidecar in LF so the content hash (computed
+# over LF-normalized text) stays stable across platforms.
+*.md text eol=lf
+*.seal.md text eol=lf

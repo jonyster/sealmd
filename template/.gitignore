@@ -1,0 +1,3 @@
+# seal-local: the review page is a derived view, regenerated on every change.
+# The committed source of truth is doc.md + doc.seal.md.
+*.review.html

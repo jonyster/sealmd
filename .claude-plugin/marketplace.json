@@ -1,0 +1,13 @@
+{
+  "name": "seal-local",
+  "description": "Fully-local document review for Claude Code — review, comment, render, all in your repo.",
+  "owner": { "name": "Jonathan Birger", "url": "https://github.com/jonyster" },
+  "plugins": [
+    {
+      "name": "seal-local",
+      "description": "Fully-local, file-based document review (doc.md + doc.seal.md). Zero network.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

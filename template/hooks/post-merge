@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# seal-local notification hook (optional). Copy to .git/hooks/post-merge and
+# chmod +x. After `git pull`/merge, if any *.seal.md sidecar changed, print its
+# review status so the owner sees new comments / approval changes immediately.
+#
+# This is the local-first notification channel: the sidecar diff IS the event.
+# (True push — email/Slack the owner — needs a server: the hosted seal publish.)
+set -euo pipefail
+ENGINE="${SEAL_ENGINE:-}"   # optional override; else assume `node` + skill path on PATH
+changed=$(git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD 2>/dev/null | grep '\.seal\.md$' || true)
+[ -z "$changed" ] && exit 0
+echo "── seal-review: review state changed ──"
+for sc in $changed; do
+  doc="${sc%.seal.md}.md"
+  [ -f "$doc" ] || continue
+  if [ -n "$ENGINE" ]; then node "$ENGINE" status --in "$doc" || true
+  else echo "  $doc updated — run: seal-review status --in $doc"; fi
+done

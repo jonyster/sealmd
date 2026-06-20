@@ -1,0 +1,7 @@
+# derived review pages (regenerated)
+*.review.html
+# notification secrets (webhook URLs, etc.)
+*.seal.notify.json
+# OS / editor cruft
+.DS_Store
+node_modules/
