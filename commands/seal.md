@@ -1,5 +1,5 @@
 ---
-description: The one command for local document review. New doc → guides owner, your role, sharing (MCP if needed), then opens it. Existing doc → opens it for review.
+description: The one command for local document review. `seal new <doc>` guides owner → your role → sharing (MCP if needed) → opens it. `seal open <doc>` opens an existing review. No sub-command = auto-detect.
 ---
 
 You are running the **seal** review flow. `$ARGUMENTS` may contain a doc path.
@@ -9,22 +9,25 @@ the whole list at once.
 ENGINE: `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"`
 (fallback: the `scripts/` dir next to the skill). Call it `seal` below.
 
-## Step 0 — find the doc
+## Step 0 — parse intent + find the doc
 
-Use the `.md` path in `$ARGUMENTS`; otherwise the doc the user means (the most
-recently edited `.md`, or ask). Call it `DOC`.
+`$ARGUMENTS` may start with a sub-command:
+- **`new`** → set up a new review (the journey below), even if a sidecar exists
+  (then `init --force` only if they confirm overwriting).
+- **`open`** → open an existing review, no questions.
+- *(no sub-command)* → **auto-detect:** existing sidecar → `open`; else → `new`.
 
-## Step 1 — new or existing?
+The `.md` path is the rest of `$ARGUMENTS`, or the doc the user means (most
+recently edited `.md`, or ask). Call it `DOC`. Existing = `<DOC>.seal.md` exists
+(`seal status --in DOC --json` succeeds).
 
-Existing if `<DOC>.seal.md` already exists (`seal status --in DOC --json` succeeds).
+## `open` — open an existing review
 
-- **Existing → just open it for review:**
-  Run `seal start DOC` as a **background task**. Give the user the
-  `http://127.0.0.1:…` URL. Done — no questions.
+Run `seal start DOC` as a **background task**. Give the user the
+`http://127.0.0.1:…` URL. Done — no questions. (If there's no sidecar yet, say so
+and offer `/seal new DOC`.)
 
-- **New → walk the short journey below**, then start.
-
-## New-doc journey (ask one at a time)
+## `new` — set up a review (ask one at a time)
 
 1. **Confirm the doc** — "Reviewing `DOC` — correct?"
 2. **Owner** — default from git (`git config user.name`). Confirm: "Owner =
