@@ -788,8 +788,9 @@ export function renderReviewPage({
       </div>
       <span class="spacer"></span>
       <button class="ghost owneract" id="editBtn" title="Edit the document (writes doc.md)">✎ Edit</button>
-      ${canCommit ? `<button class="ghost" id="commitBtn" title="Commit &amp; push the review to git">⬆ Commit &amp; push</button>
-      <label class="autocommit" id="autoWrap" title="Commit &amp; push after every comment / suggestion"><input type="checkbox" id="autoCommit"${autoCommit ? ' checked' : ''}> auto</label>` : ''}
+      ${gitRemote ? `<button class="ghost" id="commitBtn" title="Commit &amp; push the review to ${escapeHtml(gitRemote)}">⬆ Commit &amp; push</button>
+      <label class="autocommit" id="autoWrap" title="Commit &amp; push after every comment / suggestion"><input type="checkbox" id="autoCommit"${autoCommit ? ' checked' : ''}> auto</label>`
+      : canCommit ? `<button class="ghost" id="needRemote" title="This repo has no remote — add one (or paste a repo) to share">↗ Add a repo to share</button>` : ''}
       <button class="ghost" id="shareBtn" title="Share this review">↗ Share</button>
       <button class="ghost" id="themeBtn" title="Toggle theme">◐</button>
       <span class="src" title="zero network calls">🔒 offline</span>
@@ -1368,10 +1369,15 @@ if(autoCb)autoCb.onchange=async()=>{
   toast(autoCb.checked?'Auto-commit ON — pushes every comment':'Auto-commit off');
   if(autoCb.checked&&SEAL.dirty)doCommit(false);
 };
-// before closing: warn if uncommitted (so the user can commit), and tell the AI console
+// "Add a repo to share" — repo has no remote, so committing wouldn't share anything
+const needRemote=document.getElementById('needRemote');
+if(needRemote)needRemote.onclick=()=>toast('No git remote — commits would stay on this machine. Ask your agent to connect a repo (git remote add origin <url>), or open the review from a cloned repo to share.');
+// before closing: only nag if there's a REMOTE to push to (otherwise the review
+// is already saved on disk — committing wouldn't share anything). Always beacon
+// the AI console so it knows the browser closed.
 window.addEventListener('beforeunload',function(e){
   try{navigator.sendBeacon('/api/closing','{}');}catch(_){}
-  if(SEAL.canCommit&&SEAL.dirty&&!SEAL.autoCommit){e.preventDefault();e.returnValue='You have uncommitted review changes — Commit & push before leaving?';return e.returnValue;}
+  if(SEAL.gitRemote&&SEAL.dirty&&!SEAL.autoCommit){e.preventDefault();e.returnValue='You have uncommitted review changes — Commit & push before leaving?';return e.returnValue;}
 });
 
 // ---- restore view / pane / role / scroll after reload ----

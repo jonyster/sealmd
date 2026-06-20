@@ -61,8 +61,11 @@ and offer `/seal new DOC`.)
    PM, Legal, a job title — anything). You'll generate that role's summary so
    their view is tailored from the first open.
 4. **Sharing** — **ask how they want to share / be notified:**
-   - **Git only** (commit the review file — the simple default) · **Slack** · **Teams**
-     · **Email** · **none**.
+   - **Git** (the default) — **only shares if the repo has a remote.** If it
+     doesn't (or isn't a repo), tell the user it's **local-only / saved on disk**
+     and ask for a **repo URL** to push to (`git remote add origin <url>`, or open
+     from a cloned repo). No remote = no point committing for sharing.
+   - **Slack** · **Teams** · **Email** · **none**.
    - If they pick Slack/Teams/Email and that **MCP isn't connected**, tell them to
      install it (e.g. the Slack MCP) and which `--mcp` you'll pass; if they can't,
      fall back to git. For a webhook, ask for the Incoming Webhook URL.

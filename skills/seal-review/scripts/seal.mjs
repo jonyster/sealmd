@@ -834,13 +834,16 @@ function cmdServe() {
         AUTO_COMMIT = !!b.on;
         return J(res, 200, { ok: true, auto_commit: AUTO_COMMIT });
       }
-      // browser is closing — tell the AI console whether everything is committed
+      // browser is closing — tell the AI console the commit/share status
       if (req.method === 'POST' && url.pathname === '/api/closing') {
         const git = gitInfo(dirname(doc));
         const uncommitted = gitDirty(doc, git);
-        emitEvent({ type: 'browser_closed', uncommitted, doc,
-          hint: uncommitted ? `the reviewer left with UNCOMMITTED changes — run: seal commit ${doc} --push` : 'review browser closed; everything is committed' });
-        return J(res, 200, { ok: true, uncommitted });
+        let hint;
+        if (!git.remote) hint = 'review browser closed. No git remote — the review is saved on disk (local-only). To share it, connect a repo and run `seal commit --push`.';
+        else if (uncommitted) hint = `the reviewer left with UNCOMMITTED changes — run: seal commit ${doc} --push`;
+        else hint = 'review browser closed; everything is committed & pushed.';
+        emitEvent({ type: 'browser_closed', uncommitted, has_remote: !!git.remote, doc, hint });
+        return J(res, 200, { ok: true, uncommitted, has_remote: !!git.remote });
       }
       // export a portable, self-contained static review file to share (the
       // loopback URL only works on this machine; the HTML file does not).
