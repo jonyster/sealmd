@@ -372,6 +372,29 @@ test('serve: POST /api/bundle bundles all shareable files into one zip', async (
 });
 
 // ---------------------------------------------------------------------------
+// 9d. GET /api/bundle.zip streams a real zip as a download attachment.
+// ---------------------------------------------------------------------------
+test('serve: GET /api/bundle.zip streams the bundle as a zip download', async () => {
+  const ws = makeWorkspace({ git: true });
+  runSeal(['init', '--in', ws.doc], { cwd: ws.dir });
+  const port = nextPort();
+  const srv = startServer({ cwd: ws.dir, doc: ws.doc, port });
+  try {
+    await srv.ready;
+    const res = await fetch(`http://127.0.0.1:${port}/api/bundle.zip`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/zip');
+    assert.match(res.headers.get('content-disposition') || '', /attachment; filename=".*\.review-bundle\.zip"/);
+    const buf = Buffer.from(await res.arrayBuffer());
+    assert.ok(buf.length > 0, 'zip body is non-empty');
+    assert.equal(buf.slice(0, 2).toString('latin1'), 'PK', 'starts with the zip magic bytes');
+  } finally {
+    await srv.stop();
+    ws.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 9c. POST /api/send-email without SEAL_RESEND_KEY => sent:false (draft fallback)
 // ---------------------------------------------------------------------------
 test('serve: POST /api/send-email without Resend key => ok, sent:false, no-resend-key', async () => {

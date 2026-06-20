@@ -1013,6 +1013,19 @@ function cmdServe() {
         if (bnd.zip) emitEvent({ type: 'bundle_ready', zip: bnd.zip, files: bnd.names, doc });
         return J(res, 200, { ok: true, zip: bnd.zip, dir: bnd.dir, files: bnd.names });
       }
+      // download the bundle straight from the browser: build fresh, stream as a
+      // zip attachment so the browser saves it (no folder reveal needed).
+      if (req.method === 'GET' && url.pathname === '/api/bundle.zip') {
+        const bnd = makeBundle(doc);
+        if (!bnd.zip) return J(res, 501, { ok: false, error: 'the `zip` tool is not available on this machine' });
+        const data = readFileSync(bnd.zip);
+        res.writeHead(200, {
+          'content-type': 'application/zip',
+          'content-disposition': `attachment; filename="${basename(bnd.zip)}"`,
+          'content-length': data.length,
+        });
+        res.end(data); return;
+      }
       // actually SEND the review by email via Resend (SEAL_RESEND_KEY), with the
       // bundle attached. Returns { sent:false, reason } when not configured so the
       // page can fall back to opening a local mail draft.

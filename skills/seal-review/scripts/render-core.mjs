@@ -872,7 +872,6 @@ export function renderReviewPage({
             <button class="cq-x" id="cmtQuoteClear" type="button" aria-label="Remove pin">&times;</button></div>
           <textarea id="cmtInput" placeholder="Add a comment on this document… (type @ to tag)" rows="2"></textarea>
           <input id="cmtAuthor" placeholder="Your name">
-          <input id="cmtEmail" class="sc-email" type="text" placeholder="Notify by email — auto-fills when you @tag">
           <div class="cmt-compose-row">
             <span class="spacer"></span>
             <button class="btn ghost tiny" id="cmtCancel" type="button">Cancel</button>
@@ -913,7 +912,6 @@ export function renderReviewPage({
   <div class="sc-quote" id="scQuote"></div>
   <input id="scSuggest" placeholder="Proposed replacement text" style="display:none">
   <textarea id="scInput" placeholder="Add comment… (type @ to tag)"></textarea>
-  <input id="scEmail" class="sc-email" type="text" placeholder="Notify by email — auto-fills when you @tag">
   <pre class="sc-out" id="scOut"></pre>
   <div class="sc-row">
     <span class="spacer"></span>
@@ -1167,8 +1165,7 @@ function toast(m,spin){const t=document.getElementById('toast');t.innerHTML=(spi
 scPost.onclick=async()=>{
   try{localStorage.setItem('seal-author',cAuthor)}catch(e){}
   if(isServe){
-    const scEmail=document.getElementById('scEmail');
-    const payload={author:cAuthor||'me',body:scInput.value.trim(),anchor:curQuote||null,suggestion:curMode==='suggest'?scSuggest.value.trim():undefined,email:(scEmail&&scEmail.value.trim())||undefined};
+    const payload={author:cAuthor||'me',body:scInput.value.trim(),anchor:curQuote||null,suggestion:curMode==='suggest'?scSuggest.value.trim():undefined};
     try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const j=await res.json();
       if(j.ok){toast('Comment saved');sc.hidden=true;scInput.value='';scSuggest.value='';
         try{sessionStorage.setItem('seal-scroll',window.scrollY)}catch(e){}setTimeout(()=>(window.__sealReloading=true,location.reload()),650);}
@@ -1193,8 +1190,7 @@ if(cmtPost){
     try{localStorage.setItem('seal-author',who)}catch(e){}
     const bodyTxt=cmtInput.value.trim();if(!bodyTxt){cmtInput.focus();return;}
     if(isServe){
-      const cmtEmail=document.getElementById('cmtEmail');
-      try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({author:who,body:bodyTxt,anchor:null,email:(cmtEmail&&cmtEmail.value.trim())||undefined})});const j=await res.json();
+      try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({author:who,body:bodyTxt,anchor:null})});const j=await res.json();
         if(j.ok){toast('Comment saved');cmtInput.value='';try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>(window.__sealReloading=true,location.reload()),650);}
         else toast('Error: '+(j.error||'unknown'));}
       catch(e){toast('Server error: '+e.message);}
@@ -1237,23 +1233,11 @@ function onMentionKey(e){
   else return;
   mm.querySelectorAll('.mi').forEach((el,i)=>el.classList.toggle('sel',i===mmSel));
 }
-function emailFieldFor(ta){
-  // the email input is the sibling right after the textarea (sc) or after author (rail)
-  if(ta.id==='scInput')return document.getElementById('scEmail');
-  if(ta.id==='cmtInput')return document.getElementById('cmtEmail');
-  return null;
-}
 function updateNotify(ta){
   const box=ta.parentNode.querySelector('.willnotify');
   const names=(ta.value.match(/@([a-z0-9._-]+)/gi)||[]).map(s=>s.slice(1).toLowerCase());
   const hit=PEOPLE.filter(p=>names.some(n=>p.name.toLowerCase()===n||(p.handle||'').toLowerCase()===n||p.name.toLowerCase().split(' ')[0]===n));
   if(box)box.innerHTML=hit.length?'will notify: '+hit.map(p=>'<span class="nchip">@'+escapeText(p.handle||p.name)+'</span>').join(''):'';
-  // auto-fill the always-visible email field with the tagged people's emails
-  const ef=emailFieldFor(ta);if(ef&&!ef.dataset.touched){
-    const emails=[...new Set(hit.map(p=>p.email).filter(Boolean))];
-    if(emails.length){ef.value=emails.join(', ');ef.classList.add('autofilled');}
-    else{ef.value='';ef.classList.remove('autofilled');}
-  }
 }
 function attachMentions(ta){
   if(!ta||!PEOPLE.length)return;
@@ -1265,8 +1249,6 @@ function attachMentions(ta){
   });
   ta.addEventListener('keydown',onMentionKey);
   ta.addEventListener('blur',()=>setTimeout(closeMenu,150));
-  const ef=emailFieldFor(ta);
-  if(ef)ef.addEventListener('input',()=>{ef.dataset.touched=ef.value.trim()?'1':'';if(!ef.value.trim())ef.classList.remove('autofilled');});
 }
 attachMentions(scInput);attachMentions(cmtInput);
 
@@ -1281,34 +1263,20 @@ function renderShare(){
   if(isServe&&SEAL.canPR){
     html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button></div></div>';
   }
-  // Send to reviewers — bundle the files into one zip + one copyable message.
-  // Email gets its OWN section below (opens a prefilled draft). combined/mailSubj/
-  // mailTo are captured for the handlers.
-  let combined='', mailSubj='', mailTo='';
+  // Send to reviewers — download the bundle (.zip) from the browser + copy a
+  // ready-to-send note. (Slack / email channels dropped for now.)
+  let combined='';
   if(isServe){
     const T=SEAL.title||SEAL.srcName||'this document';
     const fmd=SEAL.srcName||'doc.md';
     const fhtml=fmd.replace(/\\.md$/,'.review.html');
     const fseal=fmd.replace(/\\.md$/,'.seal.md');
     const zipName=fmd.replace(/\\.md$/,'.review-bundle.zip');
-    combined='Please review "'+T+'".\\n\\nOpen '+fhtml+' — self-contained, opens offline, no install. Comment inline; your notes save into '+fseal+' and come straight back to me.\\n\\nAttach: '+fhtml+', '+fseal+', '+fmd+' (or just '+zipName+').';
-    mailSubj='Review: '+T;
-    mailTo=(SEAL.people||[]).map(p=>p&&p.email).filter(Boolean).join(', ');
-    const mcp=SEAL.mcp||[];
-    html+='<div class="opt"><b>📤 Send to reviewers</b><p>Bundle the files into one zip, paste the message.</p>'+
+    combined='Hi,\\n\\nI\\'d really value your review of "'+T+'".\\n\\nWhat to do: open '+fhtml+' — it\\'s a self-contained page that opens offline, no install needed. Add your comments right in the page; they save into '+fseal+' and come straight back to me.\\n\\nHere are the files (all in '+zipName+'):\\n• '+fhtml+' — the review page — open this one\\n• '+fseal+' — your comments + review state\\n• '+fmd+' — the source document\\n\\nThanks so much!';
+    html+='<div class="opt"><b>📤 Send to reviewers</b><p>Download the bundle, then copy the note and send it your way.</p>'+
       '<div class="sharebtns">'+
-        '<button class="btn ghost tiny" id="bundleGo">⬇ Bundle (.zip)</button>'+
-        '<button class="btn primary tiny" id="copyMsg">Copy message</button></div>'+
-      '<div id="bundleRow"></div></div>';
-    // Email — its own section. Opens a draft in the user's mail app, recipients +
-    // message prefilled; they attach the bundle and hit send. Always available.
-    html+='<div class="opt"><b>📧 Email</b><p>Sends through Resend (set <code>SEAL_RESEND_KEY</code>) with the bundle attached. No key? It opens a prefilled draft in your mail app instead.</p>'+
-      '<input class="sharerecip" id="emailTo" placeholder="Recipients (comma-separated)" value="'+escapeText(mailTo)+'">'+
-      '<button class="btn primary tiny" id="emailGo">✉️ Send email</button></div>';
-    // Slack — hand to the agent if a Slack MCP was declared; else copy the message.
-    if(mcp.includes('slack')){
-      html+='<div class="opt"><b>💬 Slack</b><p>Post the review to Slack via your connected agent.</p><button class="btn ghost tiny" data-sendmcp="slack">Send via Slack</button></div>';
-    }
+        '<button class="btn primary tiny" id="bundleGo">⬇ Download bundle (.zip)</button>'+
+        '<button class="btn ghost tiny" id="copyMsg">Copy message</button></div></div>';
   }else{
     html+='<div class="opt"><b>📄 Self-contained file</b><p>This page is already the file — send it yourself. Run <code>seal serve</code> for a live link where reviewers comment.</p></div>';
   }
@@ -1325,51 +1293,21 @@ function renderShare(){
       else{toast('Error: '+(j.error||'PR failed'));prGo.textContent='Commit & open PR';prGo.disabled=false;}}
     catch(e){toast('Error: '+e.message);prGo.textContent='Commit & open PR';prGo.disabled=false;}
   };
-  // Copy ONE combined message (no visible text box). Works for email / Slack / DM.
+  // Copy the ready-to-send note (no visible text box).
   const copyMsg=document.getElementById('copyMsg');
   if(copyMsg)copyMsg.onclick=()=>{
-    const done=()=>{const o=copyMsg.textContent;copyMsg.textContent='Copied ✓';setTimeout(()=>{copyMsg.textContent=o;},1400);toast('Message copied — paste into email / Slack');};
+    const done=()=>{const o=copyMsg.textContent;copyMsg.textContent='Copied ✓';setTimeout(()=>{copyMsg.textContent=o;},1400);toast('Message copied — paste it wherever you share');};
     if(navigator.clipboard){navigator.clipboard.writeText(combined).then(done).catch(()=>{const t=document.createElement('textarea');t.value=combined;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done();});}
     else{const t=document.createElement('textarea');t.value=combined;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done();}
   };
-  // Email — real send via Resend when configured (bundle attached); otherwise
-  // fall back to opening a prefilled draft in the user's mail client.
-  const emailGo=document.getElementById('emailGo');
-  if(emailGo)emailGo.onclick=async()=>{
-    const to=(((document.getElementById('emailTo')||{}).value)||'').split(',').map(s=>s.trim()).filter(Boolean);
-    const draft=()=>{window.location.href='mailto:'+to.join(',')+'?subject='+encodeURIComponent(mailSubj)+'&body='+encodeURIComponent(combined);};
-    const o=emailGo.textContent;emailGo.disabled=true;emailGo.textContent='Sending…';
-    try{
-      const j=await(await fetch('/api/send-email',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({to,subject:mailSubj,body:combined})})).json();
-      if(j.ok&&j.sent){toast('Email sent ✓'+(j.attached?' · bundle attached':'')+' → '+to.join(', '));}
-      else if(j.reason==='no-recipients'){toast('Add at least one recipient');}
-      else{draft();toast(j.reason==='no-resend-key'?'No Resend key — opened a draft instead':'Opened a draft');}
-    }catch(e){draft();toast('Opened a draft');}
-    emailGo.disabled=false;emailGo.textContent=o;
-  };
-  // Bundle all files into one zip (or hand back the folder path if zip is absent).
+  // Download the bundle (.zip) straight from the browser — the server builds it
+  // fresh and streams it as an attachment.
   const bundleGo=document.getElementById('bundleGo');
-  if(bundleGo)bundleGo.onclick=async()=>{
-    bundleGo.disabled=true;const o=bundleGo.textContent;bundleGo.textContent='Bundling…';
-    try{const j=await(await fetch('/api/bundle',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json();
-      const row=document.getElementById('bundleRow');
-      if(j.ok&&j.zip){row.innerHTML='<p class="filepath"><code>'+escapeText(j.zip)+'</code></p><button class="btn ghost tiny" data-reveal="zip">Show in folder</button>';}
-      else if(j.ok){row.innerHTML='<p class="filepath">No <code>zip</code> tool — attach these from <code>'+escapeText(j.dir)+'</code>: '+escapeText((j.files||[]).join(', '))+'</p><button class="btn ghost tiny" data-reveal="dir">Open folder</button>';}
-      else{toast('Error: '+(j.error||'bundle failed'));}
-      const rv=row.querySelector('[data-reveal]');
-      if(rv)rv.onclick=async()=>{try{const rr=await(await fetch('/api/reveal-bundle',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({what:rv.dataset.reveal})})).json();toast(rr.ok?'Opened in file manager':'Could not open'+(rr.error?': '+rr.error:''));}catch(e){toast('Error: '+e.message);}};}
-    catch(e){toast('Error: '+e.message);}
-    bundleGo.disabled=false;bundleGo.textContent=o;
+  if(bundleGo)bundleGo.onclick=()=>{
+    const a=document.createElement('a');a.href='/api/bundle.zip';a.download='';
+    document.body.appendChild(a);a.click();a.remove();
+    toast('Downloading the bundle…');
   };
-  // Direct send via a connected MCP channel (email / slack) — the agent fulfils it.
-  b.querySelectorAll('[data-sendmcp]').forEach(btn=>btn.onclick=async()=>{
-    const ch=btn.dataset.sendmcp;const o=btn.textContent;btn.disabled=true;btn.textContent='Sending…';
-    const to=(SEAL.people||[]).map(p=>p&&(p.email||p.handle)).filter(Boolean);
-    try{const j=await(await fetch('/api/share',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channels:[ch],to})})).json();
-      toast(j.dispatched?('Sent to your agent to deliver via '+ch):'Exported');}
-    catch(e){toast('Error: '+e.message);}
-    btn.disabled=false;btn.textContent=o;
-  });
 }
 document.getElementById('shareBtn').onclick=()=>{renderShare();shareDlg.hidden=false;};
 
