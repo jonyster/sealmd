@@ -1,134 +1,147 @@
-# sealmd
+<div align="center">
 
-Fully-local, file-based document review for Claude Code. Review a PRD / spec /
-RFC where the state lives in **two committed files** beside each other and the
-agent (your AI console) drives — no server, no network, no account.
+# ◆ &nbsp;sealmd
 
-> sealmd makes review **version-aware and human-reviewable offline**. It is
-> tamper-**evident** (you can see the doc changed after a comment was filed),
-> not tamper-**proof**. For identity-verified approvals and a non-repudiable
-> audit trail, that is what hosted `seal publish` is for.
+### Turn a Markdown file into a sign-off-ready review — **fully local**.
+
+*Two files. Zero servers. Zero network. Works with every AI coding agent.*
+
+<br>
+
+[![Zero dependencies](https://img.shields.io/badge/dependencies-0-success)](#)
+[![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)](#)
+[![Local-first](https://img.shields.io/badge/network-zero-blue)](#)
+[![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-5266eb)](#)
+
+**Claude Code** · **Cursor** · **OpenAI Codex** · **GitHub Copilot**
+
+<br>
+
+```bash
+node skills/seal-review/scripts/seal.mjs serve --in spec.md --open
+```
+
+</div>
+
+---
+
+## Why
+
+Your agent writes a PRD, a spec, an RFC. Then a human has to **actually approve it** — and a 6,000-word doc nobody reads is a rubber stamp, not a review.
+
+**sealmd** makes that review real, without a SaaS, an account, or a single network call:
+
+- 📄 **A doc, not a dashboard** — a calm, paper-feeling page a busy reviewer signs off in minutes.
+- ⚡ **~90-second summary, tailored to *your* role** — Compliance sees compliance; Eng sees architecture.
+- 💬 **Comment & suggest right on the text** — select a span, leave a note or a proposed edit.
+- ✅ **Real sign-off** — approvals bind to the content hash; edit the doc and approvals go *stale* on their own.
+- 🔌 **No lock-in** — it's two Markdown files in your repo. Diff them, commit them, own them.
+
+> Tamper-**evident**, not tamper-proof. The sidecar is plain text; git history is the real audit trail. Verified-identity approvals + a hosted shared link are the paid `seal publish` step — everything else is right here, free and offline.
+
+---
 
 ## The model
 
 ```
-doc.md            the canonical document the agent reads & writes   (committed)
-doc.seal.md       the sidecar: review state + comments              (committed)
-doc.review.html   a self-contained, zero-network review page        (gitignored, regenerated)
+spec.md            the document under review        ← committed
+spec.seal.md       the sidecar: comments, suggestions, approvals, state   ← committed
+spec.review.html   a self-contained review page     ← generated, gitignored
 ```
 
-`doc.seal.md` is a Markdown file whose every record is a compact
-`json seal:<kind>` block inside a `<!-- seal:records:begin/end -->` guard, with a
-one-line human summary above each block. You can read it in any Markdown viewer
-(VS Code, GitHub's "Files changed" tab) — or open `doc.review.html` for the
-polished view: a Summary / Full doc / Markdown toggle, each comment highlighted
-on its quoted span, and a comments rail.
+`spec.seal.md` is human-readable Markdown whose records are structured JSON blocks — readable in any editor, diffable in any PR, parseable by the tool.
 
-## Works with any AI coding agent
+---
 
-The engine is one zero-dependency Node CLI, so the same tool drives **Claude Code,
-Cursor, OpenAI Codex, and GitHub Copilot** — each just reads its own instruction
-file, all pointing at the same canonical guide:
+## Quick start
 
-- `AGENTS.md` — canonical, tool-agnostic (Codex / Cursor / Amp / others)
-- `.cursor/rules/seal-review.mdc` — Cursor
-- `.github/copilot-instructions.md` — GitHub Copilot
-- `skills/seal-review/SKILL.md` + `.claude-plugin/` — Claude Code plugin
+```bash
+git clone https://github.com/jonyster/sealmd
+cd your-project
+ENG="node /path/to/sealmd/skills/seal-review/scripts/seal.mjs"
 
-Any agent runs `node skills/seal-review/scripts/seal.mjs <command> --in doc.md`.
+$ENG init    --in spec.md                       # create the sidecar
+$ENG comment --in spec.md --author you --body "tighten scope" --anchor "exact span from the doc"
+$ENG submit  --in spec.md                        # put it up for sign-off
+$ENG approve --in spec.md --approver lead --note "LGTM"
+$ENG serve   --in spec.md --open                 # live, interactive review
+```
 
-## Install
+Open the page → pick your **role** for a tailored summary → select text to **Comment / Suggest** → **Accept** a suggestion (it rewrites `spec.md`) → **Approve**.
 
+---
+
+## Works with any AI agent
+
+The engine is one plain CLI, so the same tool drives them all — each just reads its own instruction file:
+
+| Agent | Reads |
+|---|---|
+| **Claude Code** | `.claude-plugin/` + `skills/seal-review/SKILL.md` — install via `/plugin` |
+| **Cursor** | `.cursor/rules/seal-review.mdc` |
+| **OpenAI Codex** | `AGENTS.md` |
+| **GitHub Copilot** | `.github/copilot-instructions.md` |
+
+All point back to the canonical [`AGENTS.md`](AGENTS.md). Any of them just runs `node skills/seal-review/scripts/seal.mjs … --in doc.md`.
+
+#### Claude Code
 ```
 /plugin marketplace add jonyster/sealmd
 /plugin install sealmd@sealmd
 ```
 
-Or run the engine directly (Node ≥18, zero dependencies):
+---
 
-```bash
-node skills/seal-review/scripts/seal.mjs <command> --in <doc.md>
+## How the live review works
+
+```mermaid
+flowchart LR
+    H["🧑 Reviewer (browser)"] -->|comment · suggest · @tag| S["sealmd serve<br/>127.0.0.1"]
+    S -->|writes| F["spec.md + spec.seal.md"]
+    S -->|SEAL_EVENT| A["🤖 AI agent"]
+    A -->|generate role summary| S
+    A -->|share via MCP| X["GitHub · Slack · Email"]
+    F -->|commit| G["git / PR"]
 ```
 
-## Quick start
+A loopback server, never a public one. The page writes your files; events stream to the agent (which generates tailored summaries and shares via your MCPs). No backend of ours, no keys.
 
-```bash
-ENG="node skills/seal-review/scripts/seal.mjs"
-$ENG init    --in spec.md --title "My Spec"                 # create sidecar, gitignore the html
-$ENG comment --in spec.md --author alice --body "tighten scope" --anchor "exact span from the doc"
-$ENG comment --in spec.md --author bob   --body "overall LGTM"   # document-level (no anchor)
-$ENG submit  --in spec.md                                   # pin the version up for review
-$ENG approve --in spec.md --approver alice --note "LGTM"    # record a sign-off (quorum 1 -> approved)
-$ENG status  --in spec.md                                   # state + approvals + anchor health
-$ENG render  --in spec.md --open                            # open the review page
-# edit spec.md, then:
-$ENG status  --in spec.md                                   # flags drift, stale approvals, lost anchors
-```
+---
 
-## Approval flow
+## Features
 
-`init → submit → approve / request`. Approvals bind to the **submitted** version
-(`submit` pins it); editing the doc afterward makes them **stale** until you
-`submit` again. State is **derived** from the records and re-checked against the
-live hash on every read, so a hand-forged "approved" cache value does not hold.
-`--quorum N` at init requires N distinct approvers; a current change-request
-vetoes `approved`.
+| | |
+|---|---|
+| 🎯 **Role-tailored summaries** | Pick or type any role; the digest re-writes for it. Pills are sticky & editable. |
+| 💬 **Anchored comments** | Select text → comment. Click a highlight → jump to its comment, and back. |
+| ✏️ **Suggestions** | Propose `old → new`; **Accept** applies it straight to `spec.md`. |
+| ✅ **Approvals** | Submit → approve / request changes, quorum, auto-stale on edit. |
+| 🏷️ **@mentions** | Tag people (auto-scraped from the doc); notify via git, Slack, Teams, email. |
+| 🔗 **Share** | GitHub / Slack / Email — gated on the MCPs you actually have connected. |
+| 🌙 **Dark by default** | Calm-paper light + dark, remembers your choice. |
+| 🔒 **Zero network** | The review page makes no external requests. Verifiable, offline, yours. |
+
+---
 
 ## Guarantees
 
-- **Content binding** — every comment records the sha256 of the *normalized*
-  doc at the moment it was filed.
-- **Drift detection** — `status`/`render` recompute the live hash; a comment
-  whose anchored text no longer exists is shown as "context changed".
-- **Parity** — uses the frozen `normalize_version=1` + **bare-hex** sha256, so a
-  hash computed here equals `@seal/anchor`'s / the hosted product's for the same
-  bytes.
-- **Self-contained review** — `render` emits one HTML file with zero network
-  calls.
+**Does** — content-bound comments/approvals (sha256 of the normalized doc), drift detection, parity-frozen hashing, a fully self-contained offline page.
 
-## Does NOT guarantee
+**Does not** — verify identity (authors are self-asserted), make the sidecar immutable (it's editable text — `git diff` is the backstop), or guarantee delivery. Those are the hosted `seal publish` boundary.
 
-- **Identity** — `--author` is free-text (defaults from git config but is
-  self-asserted). Anyone can pass `--author "VP Eng"`.
-- **Integrity of the sidecar itself** — it is editable plaintext; a hand-edit
-  can forge or delete a record. The backstop is **git**: `git diff doc.seal.md`
-  shows any tampering. Commit the sidecar with the doc.
-- **Non-repudiation / append-only / signed records** — none of these. Hosted
-  `seal publish` is the answer when you need them.
-
-## Role-tailored summaries
-
-The review page's summary is **role-aware**. Generate one digest per reviewer
-role into `<doc>.seal.summary.json` (auto-loaded, committed) and the reader picks
-or types their role to re-render the summary for them — client-side, zero network:
-
-```json
-{ "roles": [
-  { "role": "Compliance", "lead": "the decision Compliance must make", "key_decisions": [{"label":"Sanctions","value":"..."}], "needs_attention": ["..."] }
-] }
-```
-
-## Entering comments & suggestions
-
-Two ways, both ending with the agent as writer-of-record:
-
-1. **From the page** — in *Full doc*, select text → **💬 Comment / ✎ Suggest** →
-   write → *Copy for agent* → paste into your AI console, which runs the command.
-   (Static files can't POST; this copy-to-console step is the zero-server bridge.)
-2. **Tell your agent directly** — "comment on the retry section: …" and it runs
-   `seal-review comment …`. A suggestion (`--suggest`) records a proposed
-   replacement, shown as a del→ins diff on the page.
-
-## Notifying the owner
-
-No push in a local file. **Commit `doc.md` + `doc.seal.md`** — the sidecar diff
-is the change event; the owner sees it on `git pull` / in the PR. Optional local
-nudge: install `template/hooks/post-merge`. Email/Slack push needs a server (the
-hosted `seal publish`).
+---
 
 ## Roadmap
 
-Later: fuzzy anchor relocation, `seal watch` (auto-refresh), committed-HTML
-mode, git provenance / signed-commit identity.
+Fuzzy anchor relocation · `seal watch` auto-refresh · committed-HTML mode · git-provenance / signed-commit identity.
 
-MIT.
+---
+
+<div align="center">
+
+**MIT** · built to be forked · PRs welcome
+
+*Made for agents and the humans who sign off on their work.*
+
+</div>
