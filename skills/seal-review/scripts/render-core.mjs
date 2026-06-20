@@ -584,6 +584,8 @@ export function renderReviewPage({
   .lensmenu .mhd{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 10px 3px}
   .rolenote{background:var(--amber-soft);color:var(--amber);border-radius:8px;padding:7px 11px;font-size:12.5px;margin:8px 0;display:flex;align-items:center;gap:8px}
   .rolenote b{font-weight:600}
+  .rolenote .copycmd{margin-left:auto;white-space:nowrap;flex-shrink:0}
+  .rolenote .copycmd code{background:rgba(0,0,0,.18);padding:0 4px;border-radius:3px}
   .rolenote .sk-spin{width:13px;height:13px;border:2px solid color-mix(in srgb,var(--amber) 30%,transparent);border-top-color:var(--amber);border-radius:50%;animation:sk-spin .7s linear infinite;flex-shrink:0}
   /* skeleton */
   .summary .prep-tag{display:inline-flex;align-items:center;gap:8px;font-size:18px;line-height:1.55;color:var(--ink);margin:16px 0 0;font-weight:400}
@@ -981,7 +983,7 @@ function showPrepLoader(label){
   const near=nearestRole(label).hit;
   const {pills}=clearAfterPills();
   const note=document.createElement('div');note.className='rolenote';note.id='genBanner';
-  note.innerHTML='<span class="sk-spin" aria-hidden="true"></span><span>Preparing the <b>'+escapeText(label)+'</b> summary — showing <b>'+escapeText(labelFor(near))+'</b> meanwhile. Your agent generates it; if it doesn\\'t appear, run <code>/seal-role '+escapeText(label)+'</code> in Claude Code.</span>';
+  note.innerHTML='<span class="sk-spin" aria-hidden="true"></span><span>Preparing the <b>'+escapeText(label)+'</b> summary — showing <b>'+escapeText(labelFor(near))+'</b> meanwhile. Your agent generates it on its turn.</span><button class="btn ghost tiny copycmd" data-copycmd="/seal-role '+escapeAttr(label)+'">Copy ⌘ for Claude</button>';
   pills.after(note);
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[near]||'';
   pills.parentNode.appendChild(wrap);
@@ -1021,7 +1023,7 @@ function generateRole(slug,label){
     }).catch(()=>pollSummary(slug,label,0));
 }
 function pollSummary(slug,label,tries){
-  if(tries>=45){const {pills}=clearAfterPills();const n=document.createElement('div');n.className='rolenote';n.innerHTML='<span>No agent picked up <b>'+escapeText(label)+'</b> yet. In Claude Code run <code>/seal-role '+escapeText(label)+'</code> (or ask: "add a '+escapeText(label)+' summary"), then it appears here.</span>';pills.parentNode.appendChild(n);applyRole(nearestRole(label).hit);return;}
+  if(tries>=45){const {pills}=clearAfterPills();const n=document.createElement('div');n.className='rolenote';n.innerHTML='<span>No agent picked up <b>'+escapeText(label)+'</b> yet. Run this in Claude Code, then it appears here:</span><button class="btn ghost tiny copycmd" data-copycmd="/seal-role '+escapeAttr(label)+'">Copy <code>/seal-role '+escapeText(label)+'</code></button>';pills.parentNode.appendChild(n);applyRole(nearestRole(label).hit);return;}
   const delay=Math.min(8000,3000+tries*1500);
   setTimeout(()=>{
     fetch('/api/summary?role='+encodeURIComponent(slug),{headers:{'content-type':'application/json'}})
@@ -1336,6 +1338,11 @@ var editSaveB=document.getElementById('editSave');if(editSaveB)editSaveB.onclick
   const md=docMdEl.innerText;if(!md.trim()){toast('Empty — not saving');return;}
   await ownerPost('/api/doc',{markdown:md},'Saved to doc.md');
 };
+
+// ---- copy a /seal-role command to paste into Claude Code ----
+document.addEventListener('click',e=>{const b=e.target.closest('[data-copycmd]');if(!b)return;
+  e.preventDefault();const cmd=b.getAttribute('data-copycmd');
+  (navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast('Copied — paste in Claude Code: '+cmd)).catch(()=>{prompt('Copy this into Claude Code:',cmd);});});
 
 // ---- restore view / pane / role / scroll after reload ----
 try{
