@@ -150,6 +150,27 @@ function readPeople(doc) {
   return merged;
 }
 function requestsPath(doc) { return doc.replace(/\.md$/i, '') + '.seal.requests.jsonl'; }
+// The doc's author/publisher — the natural owner. From frontmatter author/owner,
+// or an "Author:" / "Prepared by:" line. Falls back to null (caller uses git user).
+function docAuthor(md) {
+  const text = String(md || '');
+  // 1. frontmatter author/owner
+  const fm = text.match(/^---\n([\s\S]*?)\n---/);
+  if (fm) {
+    const m = fm[1].match(/^\s*(?:author|owner)\s*:\s*(.+?)\s*$/im);
+    if (m) { const v = m[1].replace(/^["']|["']$/g, '').split(/[<(]/)[0].trim(); if (v) return v; }
+  }
+  // 2. an "Author:" / "Owner:" / "Prepared by:" line — keyword case-insensitive,
+  //    but extract the NAME case-sensitively (a Capitalised name), so we don't
+  //    grab a following lowercase word.
+  const line = text.match(/^.*?\b(?:author|owner|prepared by|written by)\b\s*:?\s*(.+)$/im);
+  if (line) {
+    const rest = line[1].replace(/\*\*/g, '').trim();
+    const nm = rest.match(/^([A-Z][a-zA-Z'’.-]+(?:\s+[A-Z][a-zA-Z'’.-]+){0,2})/);
+    if (nm) return nm[1].trim();
+  }
+  return null;
+}
 function notifyPrefsPath(doc) { return doc.replace(/\.md$/i, '') + '.seal.notify.json'; }
 function readNotifyPrefs(doc) {
   const p = notifyPrefsPath(doc);
@@ -495,7 +516,9 @@ function initSidecar(doc, { force = false } = {}) {
   const h1 = md.match(/^#\s+(.+?)\s*$/m);
   const git = gitInfo(dirname(doc));
   const ownerFlag = arg('owner');
-  const owner = ownerFlag || git.name || undefined;          // explicit, else from git
+  const da = docAuthor(md);                                  // the doc's author = publisher
+  const owner = ownerFlag || da || git.name || undefined;    // explicit > doc author > git user
+  const ownerSrc = ownerFlag ? 'flag' : (da ? 'doc' : (git.name ? 'git' : 'none'));
   const channels = (arg('notify') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   const r = {
     document: {
@@ -511,7 +534,7 @@ function initSidecar(doc, { force = false } = {}) {
   writeSidecar(sp, r);
   const gi = ensureGitignore(doc);
   const notifyFile = channels.length ? writeNotifyPrefs(doc, channels) : null;
-  return { sp, r, created: true, owner, ownerSource: owner ? (ownerFlag ? 'flag' : 'git') : 'none', channels, notifyFile, contentHash: h, gitignore: gi, git };
+  return { sp, r, created: true, owner, ownerSource: ownerSrc, channels, notifyFile, contentHash: h, gitignore: gi, git };
 }
 function cmdInit() {
   const doc = docPath();

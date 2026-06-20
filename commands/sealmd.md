@@ -62,8 +62,12 @@ and offer `/seal new DOC`.)
 ## `new` — set up a review (ask one at a time)
 
 1. **Confirm the doc** — "Reviewing `DOC` — correct?"
-2. **Owner** — default from git (`git config user.name`). Confirm: "Owner =
-   *<name>*?" If git has no name, **ask who owns sign-off**.
+2. **Owner = the doc's author/publisher**, not the local reviewer. `init` detects
+   it from the doc (frontmatter `author:`/`owner:` or an "Author:" line); if the
+   doc has none, it falls back to the git user. **Confirm: "Owner = *<detected>*?"**
+   — and if the doc was published by someone else (e.g. an external repo) make sure
+   the owner is *that* author, not you. If nothing's detected, **ask who owns
+   sign-off**. (Override with `--owner "Name"`.)
 3. **Your role** — **ask: "What's your role for this review?"** (Compliance, Eng,
    PM, Legal, a job title — anything). You'll generate that role's summary so
    their view is tailored from the first open.

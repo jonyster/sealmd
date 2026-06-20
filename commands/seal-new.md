@@ -25,7 +25,10 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
    - **"Other"** → type a path directly.
    Call the chosen path `DOC`. If `<DOC>.seal.md` already exists, ask before
    overwriting (`init --force`).
-2. **Owner** — default `git config user.name`; confirm, or ask who owns sign-off if git has none.
+2. **Owner = the doc's author/publisher** (not the local reviewer). `init` detects
+   it from the doc's frontmatter `author:`/`owner:` or an "Author:" line, else the
+   git user. Confirm "Owner = *<detected>*?"; for an externally-published doc make
+   sure it's that author, not you. If none, ask. (`--owner "Name"` to override.)
 3. **Your role** — ask "What's your role for this review?"; you'll generate that role's tailored summary.
 4. **Sharing** — ask: git only (default) / Slack / Teams / Email / none. If they
    pick a channel whose **MCP isn't connected, tell them to install it** (and which
