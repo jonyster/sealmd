@@ -104,10 +104,12 @@ export async function sendSlack(webhook, text) { return post(webhook, { text });
 export async function sendTeams(webhook, text) {
   return post(webhook, { '@type': 'MessageCard', '@context': 'http://schema.org/extensions', text });
 }
+// Escape for HTML text content (& first, so we don't double-escape the others).
+const escapeHtmlText = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 export async function sendEmail(email, subject, text) {
   if (!email.to || !email.resendKey) return { ok: false, error: 'email not configured' };
   return post('https://api.resend.com/emails',
-    { from: email.from, to: [email.to], subject, html: `<pre style="font:14px ui-sans-serif">${text.replace(/</g, '&lt;')}</pre>` },
+    { from: email.from, to: [email.to], subject, html: `<pre style="font:14px ui-sans-serif">${escapeHtmlText(text)}</pre>` },
     { authorization: `Bearer ${email.resendKey}` });
 }
 
