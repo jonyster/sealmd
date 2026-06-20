@@ -134,6 +134,37 @@ then runs `seal-review comment …` for them. (A static local file can't POST �
 this copy-to-console step is the zero-server bridge. "Show CLI" reveals the raw
 command for terminal users.) The agent is always the writer of record.
 
+### ⭐ Catching live events (role generation) — the in-app loop
+
+When the user wants a **live** review, YOU are the generator for any role that
+isn't pre-baked. Do this:
+
+1. **Launch `start` / `serve` as a BACKGROUND task** (never foreground — it runs
+   until stopped). Claude Code surfaces the server's stdout back to you.
+2. **Watch for `SEAL_EVENT` lines** in that task's output. The important one:
+   ```
+   SEAL_EVENT {"type":"summary_request","role":"Bodybuilder","doc":"…/PRD.md", "hint":"ACTION: …"}
+   ```
+   The moment you see one: **read the doc, write a tailored summary for that role,
+   and run** —
+   ```bash
+   seal summary --in <doc> --role "<role>" --file <json>
+   ```
+   The page is polling and swaps it in automatically. Don't ask the user — just
+   generate it (that's the whole point of "type any role").
+3. **If you might have missed an event** (you weren't looking at the task output
+   that turn), drain the durable queue any time:
+   ```bash
+   seal pending --in <doc>          # lists requested roles with no summary yet
+   ```
+   Generate each, then `seal summary`. The queue (`*.seal.requests.jsonl`) persists
+   every request, so nothing is lost even if the live event scrolled past.
+
+**Cadence:** after launching serve, each time you take a turn, glance at the
+background task output (and/or `seal pending`) and fulfil any open
+`summary_request`s before replying. Pre-baked roles and all other actions
+(comment, accept, dismiss, edit, status) need no agent — only new typed roles.
+
 ### Agent-in-the-loop (how the plugin runs a live review)
 
 This is the operating model when a human wants an interactive review. **You (the

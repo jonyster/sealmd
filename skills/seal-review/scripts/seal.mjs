@@ -148,6 +148,7 @@ function readPeople(doc) {
   }
   return merged;
 }
+function requestsPath(doc) { return doc.replace(/\.md$/i, '') + '.seal.requests.jsonl'; }
 function notifyPrefsPath(doc) { return doc.replace(/\.md$/i, '') + '.seal.notify.json'; }
 function readNotifyPrefs(doc) {
   const p = notifyPrefsPath(doc);
@@ -439,7 +440,7 @@ function ensureGitignore(doc) {
   try { root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: dir, encoding: 'utf8' }).trim(); } catch {}
   const gi = root + '/.gitignore';
   // *.review.html = derived view; *.seal.notify.json = holds webhook URLs/secrets.
-  const lines = ['*.review.html', '*.seal.notify.json'];
+  const lines = ['*.review.html', '*.seal.notify.json', '*.seal.requests.jsonl'];
   let body = ''; try { body = readFileSync(gi, 'utf8'); } catch {}
   const have = new Set(body.split('\n').map((l) => l.trim()));
   const add = lines.filter((l) => !have.has(l));
@@ -677,6 +678,26 @@ function cmdRender() {
 
 function cmdHash() { out({ ok: true, action: 'hash', content_hash: liveHash(docPath()) }); }
 
+// Role summaries the live page requested but that don't exist yet. The agent
+// drains this (generate each + `seal summary`) — works even if it missed the
+// live SEAL_EVENT (e.g. wasn't watching the background task at that instant).
+function cmdPending() {
+  const doc = docPath();
+  const rp = requestsPath(doc);
+  const roles = readSummaryRoles(doc);
+  const pending = []; const seen = new Set();
+  if (existsSync(rp)) {
+    for (const line of readFileSync(rp, 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      let q; try { q = JSON.parse(line); } catch { continue; }
+      const role = (q.role || '').trim(); if (!role) continue;
+      const k = role.toLowerCase(); if (seen.has(k)) continue; seen.add(k);
+      if (!findRole(roles, role)) pending.push(role);     // not yet generated (fuzzy)
+    }
+  }
+  out({ ok: true, action: 'pending', pending, doc });
+}
+
 // Write/replace a role-tailored summary into <doc>.seal.summary.json. The AI
 // console calls this in response to a `summary_request` event (or proactively).
 // Reads the summary body from --file <json>, --json '<inline>', or stdin.
@@ -810,7 +831,9 @@ function cmdServe() {
           const want = (body.role || '').trim();
           const hit = findRole(roles, want);
           if (hit) return J(res, 200, { ok: true, status: 'ready', role: hit.role, summary: hit });
-          emitEvent({ type: 'summary_request', role: want, doc, hint: 'generate a role-tailored summary and run: seal summary --in <doc> --role "<role>" --file <json>' });
+          // durable queue so the agent can fulfil it even if it missed the live event
+          try { appendFileSync(requestsPath(doc), JSON.stringify({ role: want, at: nowISO() }) + '\n'); } catch {}
+          emitEvent({ type: 'summary_request', role: want, doc, hint: `ACTION: generate a role-tailored summary for "${want}" and run: seal summary --in ${doc} --role "${want}" --file <json>` });
           return J(res, 200, { ok: true, status: 'generating', role: want });
         } else { return J(res, 404, { ok: false, error: 'unknown route' }); }
         return J(res, 200, result);
@@ -911,6 +934,7 @@ Usage: node seal.mjs <command> --in <doc.md> [opts]
   render    [--out f.html] [--summary s.json] [--open]
   serve     live local review — the page writes the sidecar  [--port N] [--open] [--notify-cmd CMD]
   summary   write a role-tailored summary  --role "Label" [--file j.json | --json '…' | stdin]
+  pending   list role summaries the live page requested but that don't exist yet  [--json]
   hash      print bare-hex content hash
   doctor    validate the sidecar (read-only)               [--json]
 
@@ -938,6 +962,7 @@ function run() {
       case 'render': cmdRender(); break;
       case 'serve': cmdServe(); break;
       case 'summary': cmdSummary(); break;
+      case 'pending': cmdPending(); break;
       case 'hash': cmdHash(); break;
       case 'doctor': cmdDoctor(); break;
       default:
