@@ -106,6 +106,7 @@ function gitInfo(dir) {
   return { inRepo: !!root, root, remote: git(['remote', 'get-url', 'origin']), name: git(['config', 'user.name']), email: git(['config', 'user.email']) };
 }
 let START_OPEN = false;
+let AUTO_COMMIT = false;   // serve: commit+push after every comment/suggestion
 function sidecarPath(doc) { return arg('sidecar') || doc.replace(/\.md$/i, '') + '.seal.md'; }
 function htmlPath(doc) { return arg('out') || doc.replace(/\.md$/i, '') + '.review.html'; }
 function readDoc(doc) { if (!existsSync(doc)) die(`doc not found: ${doc}`); return readFileSync(doc, 'utf8'); }
@@ -409,12 +410,24 @@ function buildPage(doc, r, { mode = 'static' } = {}) {
   // Share channels are gated on available MCP integrations — the agent passes
   // `--mcp github,slack,email` (the MCPs it has) when launching serve.
   const mcp = (arg('mcp') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const git = (mode === 'serve') ? gitInfo(dirname(doc)) : { inRepo: false, remote: null };
   return renderReviewPage({
     title: r.document.title, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
-    people, mcp, mdRaw: md, contentHash: ch, wordCount, comments, review, mode,
+    people, mcp, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
+    mdRaw: md, contentHash: ch, wordCount, comments, review, mode,
     renderedAt: 'rendered ' + nowISO(),
   });
+}
+// true if the review's committable files have uncommitted git changes
+function gitDirty(doc, git) {
+  if (!git || !git.inRepo) return false;
+  try {
+    const files = [doc, sidecarPath(doc)]; const sj = summaryFilePath(doc); if (existsSync(sj)) files.push(sj);
+    const rel = files.map((f) => { try { return relative(git.root, realpathSync(f)); } catch { return f; } });
+    const st = execFileSync('git', ['status', '--porcelain', '--', ...rel], { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return st.trim().length > 0;
+  } catch { return false; }
 }
 function regen(doc, r) {
   if (flag('no-render')) return null;
@@ -680,25 +693,29 @@ function cmdHash() { out({ ok: true, action: 'hash', content_hash: liveHash(docP
 
 // Stage the review's committable files (doc + review file + role summaries) and
 // commit — the shareable artifacts. Never touches the gitignored derived/secret
-// files. `--push` to push. `-m "msg"` for a message.
-function cmdCommit() {
-  const doc = docPath();
+// files. Core (throws); used by the CLI and the serve /api/commit endpoint.
+function coreCommit(doc, { message, push } = {}) {
   const git = gitInfo(dirname(doc));
-  if (!git.inRepo) die('not a git repo — this review is local-only / not shareable. Run `git init` first.');
+  if (!git.inRepo) throw new Error('not a git repo — this review is local-only / not shareable. Run `git init` first.');
   const sp = sidecarPath(doc);
-  if (!existsSync(sp)) die(`no review file at ${sp} — run \`seal init --in ${doc}\` first`);
+  if (!existsSync(sp)) throw new Error('no review file — run init first');
   const files = [doc, sp];
   const sj = summaryFilePath(doc); if (existsSync(sj)) files.push(sj);
   const rel = files.map((f) => { try { return relative(git.root, realpathSync(f)); } catch { return f; } });
-  const G = (args, opts = {}) => execFileSync('git', args, { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...opts });
-  try { G(['add', '--', ...rel]); } catch (e) { die(`git add failed: ${e.message}`); }
-  const dashM = (() => { const i = process.argv.indexOf('-m'); return i !== -1 ? process.argv[i + 1] : null; })();
-  const msg = arg('message') || arg('m') || dashM || `seal: review ${basename(doc)}`;
+  const G = (args) => execFileSync('git', args, { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  G(['add', '--', ...rel]);
+  const msg = message || `seal: review ${basename(doc)}`;
   let committed = false;
   try { G(['commit', '-m', msg]); committed = true; } catch { /* nothing to commit */ }
   let pushed = false, pushError = null;
-  if (committed && flag('push')) { try { G(['push']); pushed = true; } catch (e) { pushError = String(e.message || e).split('\n')[0]; } }
-  out({ ok: true, action: 'commit', committed, pushed, push_error: pushError, files: rel, message: committed ? msg : null, remote: git.remote, note: committed ? null : 'nothing to commit (no changes since last commit)' });
+  if (committed && push) { try { G(['push']); pushed = true; } catch (e) { pushError = String(e.message || e).split('\n')[0]; } }
+  return { committed, pushed, pushError, files: rel, message: committed ? msg : null, remote: git.remote };
+}
+function cmdCommit() {
+  const doc = docPath();
+  const dashM = (() => { const i = process.argv.indexOf('-m'); return i !== -1 ? process.argv[i + 1] : null; })();
+  const r = coreCommit(doc, { message: arg('message') || arg('m') || dashM, push: flag('push') });
+  out({ ok: true, action: 'commit', ...r, push_error: r.pushError, note: r.committed ? null : 'nothing to commit (no changes since last commit)' });
 }
 
 // Role summaries the live page requested but that don't exist yet. The agent
@@ -785,6 +802,12 @@ function cmdServe() {
   }
   const digest = makeDigest(ncfg, sendBatch);
   const notify = (ev) => { if (notifyEnabled(ncfg)) digest.add({ ...ev, docTitle: r0.document.title }); };
+  AUTO_COMMIT = flag('auto-commit');
+  // best-effort commit+push after a mutation when auto-commit is on
+  const autoCommitFire = () => {
+    if (!AUTO_COMMIT) return;
+    try { const r = coreCommit(doc, { push: true }); if (r.committed) emitEvent({ type: 'committed', pushed: r.pushed, doc }); } catch {}
+  };
   const J = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
   const server = createServer(async (req, res) => {
     try {
@@ -796,7 +819,28 @@ function cmdServe() {
       }
       if (req.method === 'GET' && url.pathname === '/api/state') {
         const { r } = loadSidecar(doc);
-        return J(res, 200, { ok: true, status: deriveStatus(r), comments: r.comments.length });
+        return J(res, 200, { ok: true, status: deriveStatus(r), comments: r.comments.length, auto_commit: AUTO_COMMIT });
+      }
+      // commit + push the review from the page
+      if (req.method === 'POST' && url.pathname === '/api/commit') {
+        const b = await readBody(req);
+        const r = coreCommit(doc, { message: b.message, push: b.push !== false });
+        emitEvent({ type: 'committed', committed: r.committed, pushed: r.pushed, doc });
+        return J(res, 200, { ok: true, ...r, push_error: r.pushError });
+      }
+      // toggle auto-commit (commit+push after each comment/suggestion)
+      if (req.method === 'POST' && url.pathname === '/api/autocommit') {
+        const b = await readBody(req);
+        AUTO_COMMIT = !!b.on;
+        return J(res, 200, { ok: true, auto_commit: AUTO_COMMIT });
+      }
+      // browser is closing — tell the AI console whether everything is committed
+      if (req.method === 'POST' && url.pathname === '/api/closing') {
+        const git = gitInfo(dirname(doc));
+        const uncommitted = gitDirty(doc, git);
+        emitEvent({ type: 'browser_closed', uncommitted, doc,
+          hint: uncommitted ? `the reviewer left with UNCOMMITTED changes — run: seal commit ${doc} --push` : 'review browser closed; everything is committed' });
+        return J(res, 200, { ok: true, uncommitted });
       }
       // export a portable, self-contained static review file to share (the
       // loopback URL only works on this machine; the HTML file does not).
@@ -829,25 +873,25 @@ function cmdServe() {
           const { cm } = coreComment(doc, { author: body.author, body: body.body, anchor: body.anchor, suggestion: body.suggestion, mention: body.mention });
           result = { ok: true, id: cm.id, anchored: !!cm.anchor, suggestion: cm.suggestion != null, mentions: cm.mentions || [] };
           const ev = { type: cm.suggestion != null ? 'suggestion' : 'comment', id: cm.id, author: cm.author, anchor: cm.anchor ? cm.anchor.quote : null, body: cm.body, suggestion: cm.suggestion ?? null, mentions: cm.mentions || [], extraEmails: body.email ? String(body.email).split(',').map((s) => s.trim()).filter(Boolean) : [], doc };
-          emitEvent(ev); notify(ev);
+          emitEvent(ev); notify(ev); autoCommitFire();
         } else if (url.pathname === '/api/reply') {
           const { cm } = coreReply(doc, body); result = { ok: true, id: cm.id };
           const ev = { type: 'reply', id: cm.id, author: body.author, body: body.body, doc };
-          emitEvent(ev); notify(ev);
+          emitEvent(ev); notify(ev); autoCommitFire();
         } else if (url.pathname === '/api/resolve' || url.pathname === '/api/dismiss') {
           const { cm } = coreSetStatus(doc, { id: body.id, status: 'resolved' }); result = { ok: true, id: cm.id };
-          emitEvent({ type: 'dismiss', id: cm.id, doc });
+          emitEvent({ type: 'dismiss', id: cm.id, doc }); autoCommitFire();
         } else if (url.pathname === '/api/reopen') {
           const { cm } = coreSetStatus(doc, { id: body.id, status: 'open' }); result = { ok: true, id: cm.id };
-          emitEvent({ type: 'reopen', id: cm.id, doc });
+          emitEvent({ type: 'reopen', id: cm.id, doc }); autoCommitFire();
         } else if (url.pathname === '/api/accept') {
           const { cm } = coreAccept(doc, { id: body.id });
           result = { ok: true, id: cm.id, content_hash: liveHash(doc) };
-          emitEvent({ type: 'accept', id: cm.id, doc, hint: 'a suggestion was applied to the doc — content hash changed' });
+          emitEvent({ type: 'accept', id: cm.id, doc, hint: 'a suggestion was applied to the doc — content hash changed' }); autoCommitFire();
         } else if (url.pathname === '/api/doc') {
           const { content_hash } = coreSaveDoc(doc, { markdown: body.markdown });
           result = { ok: true, content_hash };
-          emitEvent({ type: 'doc_edited', doc, content_hash, hint: 'owner edited the document' });
+          emitEvent({ type: 'doc_edited', doc, content_hash, hint: 'owner edited the document' }); autoCommitFire();
         } else if (url.pathname === '/api/summary') {
           // request a role-tailored summary; if not present, ask the AI console (event) to generate it
           const roles = readSummaryRoles(doc);

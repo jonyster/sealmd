@@ -320,6 +320,7 @@ const SEAL_SVG = `<svg viewBox="0 0 80 64" fill="none" stroke="currentColor" str
 export function renderReviewPage({
   title, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
   curatedRoles = [], reviewerRole = '', people = [], mcp = [],
+  canCommit = false, gitRemote = null, autoCommit = false, dirty = false,
   mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static',
 }) {
   if (!roles.length) roles = [{ role: 'General', ...deriveSummary(mdRaw, wordCount) }];
@@ -403,6 +404,7 @@ export function renderReviewPage({
     people: Array.isArray(people) ? people : [],
     mcp: Array.isArray(mcp) ? mcp : [],
     taxonomy: taxonomy.map((t) => ({ slug: t.slug, label: t.label })),
+    canCommit, gitRemote, autoCommit, dirty,
   }).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html><html lang="en" data-theme="dark"><head>
@@ -749,6 +751,8 @@ export function renderReviewPage({
   .btn.primary:hover{background:var(--seal-press)}
   .btn.ghost{background:var(--fill);color:var(--ink-soft)}
   .btn.tiny{padding:5px 10px;font-size:12px}
+  .autocommit{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-soft);border:1px solid var(--line-strong);background:var(--fill);border-radius:var(--r-md);padding:6px 10px;cursor:pointer;user-select:none}
+  .autocommit input{accent-color:var(--seal);margin:0}
   @keyframes pop{from{transform:translateY(5px) scale(.99);opacity:0}to{transform:none;opacity:1}}
   /* responsive */
   @media (max-width:1100px){
@@ -784,6 +788,8 @@ export function renderReviewPage({
       </div>
       <span class="spacer"></span>
       <button class="ghost owneract" id="editBtn" title="Edit the document (writes doc.md)">✎ Edit</button>
+      ${canCommit ? `<button class="ghost" id="commitBtn" title="Commit &amp; push the review to git">⬆ Commit &amp; push</button>
+      <label class="autocommit" id="autoWrap" title="Commit &amp; push after every comment / suggestion"><input type="checkbox" id="autoCommit"${autoCommit ? ' checked' : ''}> auto</label>` : ''}
       <button class="ghost" id="shareBtn" title="Share this review">↗ Share</button>
       <button class="ghost" id="themeBtn" title="Toggle theme">◐</button>
       <span class="src" title="zero network calls">🔒 offline</span>
@@ -1343,6 +1349,30 @@ var editSaveB=document.getElementById('editSave');if(editSaveB)editSaveB.onclick
 document.addEventListener('click',e=>{const b=e.target.closest('[data-copycmd]');if(!b)return;
   e.preventDefault();const cmd=b.getAttribute('data-copycmd');
   (navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast('Copied — paste in Claude Code: '+cmd)).catch(()=>{prompt('Copy this into Claude Code:',cmd);});});
+
+// ---- git: commit & push from the page + auto-commit + close handling ----
+const commitBtn=document.getElementById('commitBtn'), autoCb=document.getElementById('autoCommit');
+async function doCommit(loud){
+  if(commitBtn){commitBtn.disabled=true;commitBtn.textContent='⬆ …';}
+  try{const j=await(await fetch('/api/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({push:true})})).json();
+    if(j.ok){SEAL.dirty=false;
+      if(loud)toast(j.committed?(j.pushed?'Committed & pushed ✓':'Committed ✓ ('+(j.push_error||'no remote — not pushed')+')'):'Nothing to commit');}
+    else if(loud)toast('Error: '+(j.error||'commit failed'));}
+  catch(e){if(loud)toast('Commit error: '+e.message);}
+  if(commitBtn){commitBtn.disabled=false;commitBtn.innerHTML='⬆ Commit &amp; push';}
+}
+if(commitBtn)commitBtn.onclick=()=>doCommit(true);
+if(autoCb)autoCb.onchange=async()=>{
+  SEAL.autoCommit=autoCb.checked;
+  try{await fetch('/api/autocommit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:autoCb.checked})});}catch(e){}
+  toast(autoCb.checked?'Auto-commit ON — pushes every comment':'Auto-commit off');
+  if(autoCb.checked&&SEAL.dirty)doCommit(false);
+};
+// before closing: warn if uncommitted (so the user can commit), and tell the AI console
+window.addEventListener('beforeunload',function(e){
+  try{navigator.sendBeacon('/api/closing','{}');}catch(_){}
+  if(SEAL.canCommit&&SEAL.dirty&&!SEAL.autoCommit){e.preventDefault();e.returnValue='You have uncommitted review changes — Commit & push before leaving?';return e.returnValue;}
+});
 
 // ---- restore view / pane / role / scroll after reload ----
 try{
