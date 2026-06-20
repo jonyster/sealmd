@@ -96,16 +96,22 @@ All point back to the canonical [`AGENTS.md`](AGENTS.md). Any of them just runs 
 ## How the live review works
 
 ```mermaid
-flowchart LR
-    H["🧑 Reviewer (browser)"] -->|comment · suggest · @tag| S["sealmd serve<br/>127.0.0.1"]
-    S -->|writes| F["spec.md + spec.seal.md"]
-    S -->|SEAL_EVENT| A["🤖 AI agent"]
-    A -->|generate role summary| S
-    A -->|share via MCP| X["GitHub · Slack · Email"]
-    F -->|commit| G["git / PR"]
+flowchart TD
+    H["🧑 Reviewer · browser"]
+    S["⚙️ sealmd serve · 127.0.0.1 (loopback)"]
+    A["🤖 AI agent"]
+    F["📄 spec.md + spec.seal.md"]
+    G["🔀 git / PR"]
+    X["📣 GitHub · Slack · Email"]
+
+    H -->|"comment · suggest · @tag · approve"| S
+    S -->|"writes"| F
+    F -->|"commit"| G
+    S <-->|"SEAL_EVENT ⇄ role summary"| A
+    A -->|"share (via MCP)"| X
 ```
 
-A loopback server, never a public one. The page writes your files; events stream to the agent (which generates tailored summaries and shares via your MCPs). No backend of ours, no keys.
+A **loopback** server — never public. The page **writes your files**; each action streams a `SEAL_EVENT` to the agent, which writes back tailored summaries and shares via your MCPs. No backend of ours, no keys. Git is the transport between people.
 
 ---
 
