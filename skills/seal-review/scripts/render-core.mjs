@@ -935,9 +935,12 @@ function setStag(label){const b=document.querySelector('#docSummary .stag b');if
 function setLensValue(label){const i=document.getElementById('roleInput');if(i)i.value=label+' summary';}
 function escapeAttr(s){return escapeText(s).replace(/"/g,'&quot;');}
 // ---- sticky, user-editable role pills (persisted per doc) ----
-const PILLS_KEY='seal-pills:'+(SEAL.docPath||'');
+const PILLS_KEY='seal-pills2:'+(SEAL.docPath||'');
 function defaultPills(){const out=[],seen=new Set();
-  ['general',SEAL.defaultSlug].concat(Object.keys(SEAL.summaries)).forEach(x=>{if(x&&!seen.has(x)){seen.add(x);out.push(x);}});return out;}
+  // show the full role taxonomy as pills by default (general first) + any
+  // pre-generated roles. Users prune with × and re-add / type via the ▾ menu.
+  ['general',SEAL.defaultSlug].concat(Object.keys(SEAL.summaries)).concat((SEAL.taxonomy||[]).map(t=>t.slug))
+    .forEach(x=>{if(x&&!seen.has(x)){seen.add(x);out.push(x);}});return out;}
 function loadPills(){try{const v=JSON.parse(localStorage.getItem(PILLS_KEY));if(Array.isArray(v)&&v.length)return v;}catch(e){}return defaultPills();}
 let pillSlugs=loadPills();
 function savePills(){try{localStorage.setItem(PILLS_KEY,JSON.stringify(pillSlugs))}catch(e){}}

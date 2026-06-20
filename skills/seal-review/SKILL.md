@@ -50,6 +50,26 @@ node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs" <command> --in 
 If `${CLAUDE_PLUGIN_ROOT}` is unset (e.g. running from a clone, not an install),
 use the `scripts/` dir next to this SKILL.md.
 
+## The one simple command
+
+When the user just wants to review a doc, run **`start`** with the path — it
+creates the sidecar if needed (owner from git), then opens the **live** review:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs" start <doc.md>
+```
+
+`start` prefers **serve** (live, writable) over a static render. It prints git
+shareability + owner status to stderr — **act on it**:
+
+- **Not a git repo** → the review is *local only, not shareable*. Tell the user;
+  offer to `git init` so the sidecar can be committed and shared.
+- **Owner unknown** (no `--owner`, no `git config user.name`) → **ask the user who
+  owns sign-off**, then pass `--owner "Name"`.
+- Always remind the user to **commit `doc.md` + `doc.seal.md`** so every
+  collaborator sees the review. The sidecar is the shareable artifact — git is
+  the transport. (The `*.review.html` is derived and gitignored.)
+
 ## Commands
 
 | Command | Use |

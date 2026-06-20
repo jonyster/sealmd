@@ -86,7 +86,26 @@ function gitUser(dir) {
 }
 
 // ---- paths ----------------------------------------------------------------
-function docPath() { const p = arg('in'); if (!p) die('--in <doc.md> is required'); return p; }
+function docPath() {
+  let p = arg('in');
+  if (!p) {
+    // positional path: an argv item ending in .md that isn't a flag value
+    for (let i = 2; i < process.argv.length; i++) {
+      const a = process.argv[i];
+      if (/\.md$/i.test(a) && !a.startsWith('-') && !(process.argv[i - 1] || '').startsWith('--')) { p = a; break; }
+    }
+  }
+  if (!p) die('provide the doc: --in <doc.md> (or pass the path as an argument)');
+  return p;
+}
+// git context for owner + shareability.
+function gitInfo(dir) {
+  const SILENT = { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] };
+  const git = (args) => { try { return execFileSync('git', args, SILENT).trim() || null; } catch { return null; } };
+  const root = git(['rev-parse', '--show-toplevel']);
+  return { inRepo: !!root, root, remote: git(['remote', 'get-url', 'origin']), name: git(['config', 'user.name']), email: git(['config', 'user.email']) };
+}
+let START_OPEN = false;
 function sidecarPath(doc) { return arg('sidecar') || doc.replace(/\.md$/i, '') + '.seal.md'; }
 function htmlPath(doc) { return arg('out') || doc.replace(/\.md$/i, '') + '.review.html'; }
 function readDoc(doc) { if (!existsSync(doc)) die(`doc not found: ${doc}`); return readFileSync(doc, 'utf8'); }
@@ -450,37 +469,61 @@ function writeNotifyPrefs(doc, channels) {
 // ===========================================================================
 // Commands
 // ===========================================================================
-function cmdInit() {
-  const doc = docPath();
-  const raw = readDoc(doc);
+// Create the sidecar. Owner defaults to git user.name (so "according to git"),
+// overridable with --owner. Returns details; throws nothing if already exists.
+function initSidecar(doc, { force = false } = {}) {
   const sp = sidecarPath(doc);
-  if (existsSync(sp) && !flag('force')) die(`sidecar already exists: ${sp} (use --force to overwrite)`);
-  const md = normalizeMarkdown(raw);
+  if (existsSync(sp) && !force) return { sp, created: false };
+  const md = normalizeMarkdown(readDoc(doc));
   const h = contentHash(md);
   const now = nowISO();
   const source = basename(doc);
   const h1 = md.match(/^#\s+(.+?)\s*$/m);
-  // notification setup: --notify is a comma list of channels chosen during setup.
+  const git = gitInfo(dirname(doc));
+  const ownerFlag = arg('owner');
+  const owner = ownerFlag || git.name || undefined;          // explicit, else from git
   const channels = (arg('notify') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   const r = {
     document: {
       kind: 'document', seal_schema_version: SCHEMA_VERSION, normalization_version: NORM_VERSION,
       source, title: arg('title') || (h1 ? h1[1].replace(/[*_`]/g, '').trim() : source.replace(/\.md$/i, '')),
-      owner: arg('owner') || undefined,                 // who gets owner notifications
-      notify: channels.length ? channels : undefined,   // non-secret channel choice
+      owner, notify: channels.length ? channels : undefined,
       quorum: Math.max(1, parseInt(arg('quorum') || '1', 10) || 1),
       created_at: now,
     },
     state: { kind: 'state', status: 'draft', content_hash: h, updated_at: now },
-    comments: [],
-    approvals: [],
+    comments: [], approvals: [],
   };
   writeSidecar(sp, r);
   const gi = ensureGitignore(doc);
   const notifyFile = channels.length ? writeNotifyPrefs(doc, channels) : null;
-  const html = regen(doc, r);
-  maybeOpen(html);
-  out({ ok: true, action: 'init', sidecar: sp, content_hash: h, gitignore: gi || 'already-ignored', owner: arg('owner') || null, notify: channels, notify_file: notifyFile, html });
+  return { sp, r, created: true, owner, ownerSource: owner ? (ownerFlag ? 'flag' : 'git') : 'none', channels, notifyFile, contentHash: h, gitignore: gi, git };
+}
+function cmdInit() {
+  const doc = docPath();
+  const sp = sidecarPath(doc);
+  if (existsSync(sp) && !flag('force')) die(`sidecar already exists: ${sp} (use --force to overwrite)`);
+  const res = initSidecar(doc, { force: flag('force') });
+  const html = regen(doc, res.r); maybeOpen(html);
+  out({ ok: true, action: 'init', sidecar: res.sp, content_hash: res.contentHash, owner: res.owner || null, owner_source: res.ownerSource, notify: res.channels, notify_file: res.notifyFile, gitignore: res.gitignore || 'already-ignored', html });
+}
+// `start <doc.md>` — the one simple command: init if needed (owner from git),
+// warn about git shareability, then open the live review.
+function cmdStart() {
+  const doc = docPath();
+  const sp = sidecarPath(doc);
+  const git = gitInfo(dirname(doc));
+  let initRes = null;
+  if (!existsSync(sp)) initRes = initSidecar(doc, {});
+  const { r } = loadSidecar(doc);
+  const owner = r.document.owner;
+  // shareability guidance (the agent reads stderr; surfaces to the user)
+  if (!git.inRepo) console.error('⚠  Not a git repo — this review is LOCAL ONLY (not shareable). `git init`, then commit doc.md + the .seal.md so others can view it.');
+  else console.error(`✓  git repo${git.remote ? ' (' + git.remote + ')' : ''} — commit ${basename(doc)} + ${basename(sp)} so collaborators can view the review.`);
+  if (!owner) console.error('⚠  No owner set, and git has no user.name. Set one: `--owner "Name"` (or `git config user.name`). Ask the user who owns sign-off.');
+  else console.error(`👤 Owner: ${owner}${initRes ? ` (from ${initRes.ownerSource})` : ''}.`);
+  START_OPEN = true;
+  cmdServe();
 }
 
 // ---- mutation cores (no argv, no stdout; throw on error) -------------------
@@ -784,7 +827,7 @@ function cmdServe() {
     console.error(`Posts write ${sidecarPath(doc)} via the same fail-loud engine. Events stream to stdout for the AI console.`);
     if (notifyEnabled(ncfg)) console.error(`Notifications ON → ${[ncfg.slack && 'slack', ncfg.teams && 'teams', ncfg.email.resendKey && 'email'].filter(Boolean).join(', ')}${ncfg.digestInterval ? ` (digest every ${ncfg.digestInterval}s)` : ''}`);
     emitEvent({ type: 'serve_started', url: u, doc });
-    if (flag('open')) {
+    if (flag('open') || START_OPEN) {
       const cmd = process.platform === 'darwin' ? ['open', [u]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', u]] : ['xdg-open', [u]];
       try { spawn(cmd[0], cmd[1], { detached: true, stdio: 'ignore' }).unref(); } catch {}
     }
@@ -858,6 +901,7 @@ Usage: node seal.mjs <command> --in <doc.md> [opts]
             [--title T] [--quorum N] [--owner "Name"] [--notify git,slack,teams,email]
             [--slack-webhook URL] [--teams-webhook URL] [--email-to ADDR] [--digest-interval SECS] [--force]
   status    review state, comments, approvals, anchors      [--json]
+  start     <doc.md>   the one command: init if needed (owner from git) + open live review
   comment   --body B [--author A] [--anchor "exact span"] [--suggest "replacement"] [--mention name,name]
   reply     --id ID --body B [--author A]
   resolve   --id ID            reopen --id ID
@@ -875,9 +919,12 @@ editing the doc after submit makes them stale until you submit again. Mutating
 commands auto-render unless --no-render. Sidecar defaults to <doc>.seal.md.`;
 
 function run() {
-  const cmd = process.argv[2];
+  const cmd0 = process.argv[2];
+  // `seal <doc.md>` (bare path) is shorthand for `start`.
+  const cmd = (cmd0 && /\.md$/i.test(cmd0) && !cmd0.startsWith('-')) ? 'start' : cmd0;
   try {
     switch (cmd) {
+      case 'start': cmdStart(); break;
       case 'init': cmdInit(); break;
       case 'status': cmdStatus(); break;
       case 'comment': cmdComment(); break;
