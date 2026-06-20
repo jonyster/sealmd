@@ -1021,7 +1021,7 @@ lensMenu.addEventListener('click',e=>{const it=e.target.closest('.mi');if(!it)re
 // it and the page re-renders. Show the nearest baked summary meanwhile.
 function showPasteCommand(label,near){
   const {pills}=clearAfterPills();
-  const cmd='/seal-role "'+label+'"';
+  const cmd='/sealmd:seal-role "'+label+'"';
   const note=document.createElement('div');note.className='rolenote';
   note.innerHTML='<span>No <b>'+escapeText(label)+'</b> summary yet. Paste this into your AI session (Claude Code) to generate one — it shows up here after you run it. Meanwhile you\\'re seeing <b>'+escapeText(labelFor(near))+'</b>.</span>'+
     '<code class="pastecmd">'+escapeText(cmd)+'</code>'+
@@ -1371,7 +1371,7 @@ var editSaveB=document.getElementById('editSave');if(editSaveB)editSaveB.onclick
   await ownerPost('/api/doc',{markdown:md},'Saved to doc.md');
 };
 
-// ---- copy a /seal-role command to paste into Claude Code ----
+// ---- copy a /sealmd:seal-role command to paste into Claude Code ----
 document.addEventListener('click',e=>{const b=e.target.closest('[data-copycmd]');if(!b)return;
   e.preventDefault();const cmd=b.getAttribute('data-copycmd');
   (navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast('Copied — paste in Claude Code: '+cmd)).catch(()=>{prompt('Copy this into Claude Code:',cmd);});});
