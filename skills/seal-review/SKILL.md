@@ -134,6 +134,15 @@ then runs `seal-review comment …` for them. (A static local file can't POST �
 this copy-to-console step is the zero-server bridge. "Show CLI" reveals the raw
 command for terminal users.) The agent is always the writer of record.
 
+### Adding a role on demand — `/seal-role`
+
+The reliable way to add a typed role's summary is the **`/seal-role`** command (or
+the user just asking "add a `<role>` summary"). On that turn YOU generate it
+synchronously — read the doc, write the JSON digest, `seal summary --in <doc>
+--role "<role>" --file <json>`. If the user didn't name a role, **ask them what
+their role is** first. The live page swaps it in. This does not depend on
+catching a background event — it's a normal command turn, so it always works.
+
 ### ⭐ Catching live events (role generation) — the in-app loop
 
 When the user wants a **live** review, YOU are the generator for any role that

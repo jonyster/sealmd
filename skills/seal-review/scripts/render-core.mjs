@@ -981,7 +981,7 @@ function showPrepLoader(label){
   const near=nearestRole(label).hit;
   const {pills}=clearAfterPills();
   const note=document.createElement('div');note.className='rolenote';note.id='genBanner';
-  note.innerHTML='<span class="sk-spin" aria-hidden="true"></span><span>Preparing the tailored <b>'+escapeText(label)+'</b> summary — showing <b>'+escapeText(labelFor(near))+'</b> meanwhile. It\\'ll swap in on its own, no refresh needed.</span>';
+  note.innerHTML='<span class="sk-spin" aria-hidden="true"></span><span>Preparing the <b>'+escapeText(label)+'</b> summary — showing <b>'+escapeText(labelFor(near))+'</b> meanwhile. Your agent generates it; if it doesn\\'t appear, run <code>/seal-role '+escapeText(label)+'</code> in Claude Code.</span>';
   pills.after(note);
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[near]||'';
   pills.parentNode.appendChild(wrap);
@@ -1021,7 +1021,7 @@ function generateRole(slug,label){
     }).catch(()=>pollSummary(slug,label,0));
 }
 function pollSummary(slug,label,tries){
-  if(tries>=45){const {pills}=clearAfterPills();const n=document.createElement('div');n.className='rolenote';n.innerHTML='<span>Still preparing the '+escapeText(label)+' summary — it may take a moment. Leave this open or try again.</span>';pills.parentNode.appendChild(n);return;}
+  if(tries>=45){const {pills}=clearAfterPills();const n=document.createElement('div');n.className='rolenote';n.innerHTML='<span>No agent picked up <b>'+escapeText(label)+'</b> yet. In Claude Code run <code>/seal-role '+escapeText(label)+'</code> (or ask: "add a '+escapeText(label)+' summary"), then it appears here.</span>';pills.parentNode.appendChild(n);applyRole(nearestRole(label).hit);return;}
   const delay=Math.min(8000,3000+tries*1500);
   setTimeout(()=>{
     fetch('/api/summary?role='+encodeURIComponent(slug),{headers:{'content-type':'application/json'}})
