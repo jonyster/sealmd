@@ -341,6 +341,37 @@ test('serve: POST /api/share writes static html and emits share_request (github)
 });
 
 // ---------------------------------------------------------------------------
+// 9b. POST /api/bundle zips review.html + sidecar + source .md (+ summary).
+// ---------------------------------------------------------------------------
+test('serve: POST /api/bundle bundles all shareable files into one zip', async () => {
+  const ws = makeWorkspace({ git: true });
+  runSeal(['init', '--in', ws.doc], { cwd: ws.dir });
+  const port = nextPort();
+  const srv = startServer({ cwd: ws.dir, doc: ws.doc, port });
+  try {
+    await srv.ready;
+    const { status, json } = await postJSON(port, '/api/bundle', {});
+    assert.equal(status, 200);
+    assert.equal(json.ok, true);
+    // the file list always names the three shareable artifacts (basenames)
+    assert.ok(json.files.some((f) => /\.review\.html$/.test(f)), 'bundle lists the review html');
+    assert.ok(json.files.some((f) => /\.seal\.md$/.test(f)), 'bundle lists the sidecar');
+    assert.ok(json.files.some((f) => /(^|\/)doc\.md$/.test(f) || f === 'doc.md'), 'bundle lists the source md');
+    if (json.zip) {
+      // `zip` present on this platform → a real archive on disk
+      assert.ok(existsSync(json.zip), 'zip archive exists on disk');
+      assert.match(json.zip, /\.review-bundle\.zip$/);
+    } else {
+      // graceful fallback: no zip tool, hand back the folder instead
+      assert.ok(json.dir && existsSync(json.dir), 'fallback returns the folder path');
+    }
+  } finally {
+    await srv.stop();
+    ws.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 10. POST /api/autocommit {on:true} => auto_commit:true.
 // ---------------------------------------------------------------------------
 test('serve: POST /api/autocommit {on:true} returns auto_commit true', async () => {

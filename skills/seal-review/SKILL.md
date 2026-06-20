@@ -124,17 +124,21 @@ render — commit it):
 
 ```json
 { "roles": [
-  { "role": "General",     "lead": "...", "key_decisions": [{"label":"...","value":"..."}], "needs_attention": ["..."] },
-  { "role": "Compliance",  "lead": "...", "key_decisions": [...], "needs_attention": [...] },
-  { "role": "Engineering", "lead": "...", "key_decisions": [...], "needs_attention": [...] }
+  { "role": "General",     "lead": "...", "key_decisions": [{"label":"...","value":"..."}], "relevant_sections": [{"section":"§N Heading","detail":"what it means for this role"}], "needs_attention": ["..."] },
+  { "role": "Compliance",  "lead": "...", "key_decisions": [...], "relevant_sections": [...], "needs_attention": [...] },
+  { "role": "Engineering", "lead": "...", "key_decisions": [...], "relevant_sections": [...], "needs_attention": [...] }
 ] }
 ```
 
-Lead each role with the decision **that role** must make; `key_decisions` are the
-choices affecting them; `needs_attention` is what they must judge before signing
-off. The first role is the default. A single-summary file (`{lead, key_decisions,
-needs_attention}`) still works (renders as "General"); if no file exists the
-summary is auto-derived.
+**All four fields are REQUIRED per role and must be non-empty** — each renders as
+its own block (lead → "Key decisions" → "What this means for you" →
+"Your call to make"). A missing field shows a blank section. `relevant_sections`
+is the one agents skip most: give 3–6 entries, each naming a real doc section (its
+`§`/heading) and saying in one line what it means *for that role*. `key_decisions`
+≥ 3, `needs_attention` ≥ 2. Lead each role with the decision **that role** must
+make. The first role is the default. A single-summary file (`{lead, key_decisions,
+relevant_sections, needs_attention}`) still works (renders as "General"); if no
+file exists the summary is auto-derived.
 
 ### Entering comments from the rendered page (no server)
 

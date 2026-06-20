@@ -983,6 +983,40 @@ function cmdServe() {
         try { revealInFileManager(outFile); return J(res, 200, { ok: true, file: outFile }); }
         catch (e) { return J(res, 500, { ok: false, error: String(e.message || e) }); }
       }
+      // bundle all shareable files (review.html + sidecar + source .md + summaries)
+      // into ONE zip for the user to attach. Falls back to the folder path if the
+      // `zip` tool isn't present. Paths recomputed server-side.
+      if (req.method === 'POST' && url.pathname === '/api/bundle') {
+        const { r } = loadSidecar(doc);
+        const htmlFile = htmlPath(doc);
+        writeFileSync(htmlFile, buildPage(doc, r, { mode: 'static' }), 'utf8');     // fresh export
+        const parts = [htmlFile, doc, sidecarPath(doc)];
+        const sj = summaryFilePath(doc); if (existsSync(sj)) parts.push(sj);
+        const files = parts.filter((f) => existsSync(f));
+        const dir = dirname(realpathSync(doc));
+        const base = basename(doc).replace(/\.md$/i, '');
+        const zipPath = `${dir}/${base}.review-bundle.zip`;
+        const names = files.map((f) => basename(f));
+        try {
+          try { execFileSync('rm', ['-f', zipPath]); } catch {}
+          execFileSync('zip', ['-j', '-q', zipPath, ...files], { cwd: dir });
+          emitEvent({ type: 'bundle_ready', zip: zipPath, files: names, doc });
+          return J(res, 200, { ok: true, zip: zipPath, dir, files: names });
+        } catch {
+          // no `zip` available — hand back the folder + file list instead
+          return J(res, 200, { ok: true, zip: null, dir, files: names });
+        }
+      }
+      // reveal an arbitrary review artifact (zip / folder) — POST { what:'zip'|'dir' }
+      if (req.method === 'POST' && url.pathname === '/api/reveal-bundle') {
+        const b = await readBody(req);
+        const dir = dirname(realpathSync(doc));
+        const base = basename(doc).replace(/\.md$/i, '');
+        const target = b.what === 'zip' ? `${dir}/${base}.review-bundle.zip` : dir;
+        if (!existsSync(target)) return J(res, 404, { ok: false, error: 'not found — bundle first' });
+        try { revealInFileManager(target); return J(res, 200, { ok: true, file: target }); }
+        catch (e) { return J(res, 500, { ok: false, error: String(e.message || e) }); }
+      }
       // role-tailored summary: poll for a role (exact or nearest) — generated on demand
       if (req.method === 'GET' && url.pathname === '/api/summary') {
         const roles = readSummaryRoles(doc);

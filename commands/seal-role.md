@@ -23,6 +23,13 @@ Do this, in order:
      "relevant_sections": [{ "section": "…", "detail": "what it means for this role" }],
      "needs_attention": ["the risks/open questions this role must judge"] }
    ```
+   **ALL FOUR fields are REQUIRED and must be non-empty** — the page renders each
+   as its own block (lead → "Key decisions" → "What this means for you" → "Your
+   call to make"). A summary missing a field shows a blank section, which looks
+   broken. In particular **`relevant_sections` is the most-skipped one**: give 3–6
+   entries, each naming a real doc section (use its `§`/heading) and saying, in one
+   line, what that section means *for this role specifically* (not a generic recap).
+   `key_decisions` ≥ 3, `needs_attention` ≥ 2. Cite real `§`/section refs throughout.
 4. **Write it** with the engine (path: `${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs`,
    or the `scripts/` dir next to the skill):
    ```bash

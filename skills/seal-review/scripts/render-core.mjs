@@ -725,7 +725,9 @@ export function renderReviewPage({
   .sc-email{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;outline:none;color:var(--ink);background:var(--input-fill);margin-bottom:7px}
   .sc-email:focus{border-color:var(--seal);box-shadow:0 0 0 2px var(--seal-soft)}
   .sc-email.autofilled{border-color:var(--seal-line);background:var(--seal-soft)}
-  /* share dialog: send kit (files + copyable message / agent prompt) */
+  /* share dialog: send kit */
+  .sharebtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+  #bundleRow .filepath{margin:8px 0 6px}
   .sharefiles{list-style:none;margin:6px 0 10px;padding:0;display:flex;flex-direction:column;gap:5px}
   .sharefiles li{display:flex;align-items:baseline;gap:8px;font-size:12.5px}
   .sharefiles code{background:var(--input-fill,rgba(0,0,0,.06));border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--ink);white-space:nowrap}
@@ -1261,37 +1263,26 @@ function renderShare(){
   if(isServe&&SEAL.canPR){
     html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button></div></div>';
   }
-  // Commit & push the review to the remote, plus an auto-commit toggle (every
-  // comment/suggestion is committed+pushed). Lives here, not in the toolbar.
-  if(isServe&&SEAL.gitRemote){
-    html+='<div class="opt"><b>⬆ Commit &amp; push</b><p>Push the review (doc + sidecar) to <code>'+escapeText(SEAL.gitRemote)+'</code> so collaborators see it.</p>'+
-      '<div id="commitRow"><button class="btn ghost tiny" id="commitGo">Commit &amp; push now</button>'+
-      '<label class="autocommit" id="autoWrap" title="Commit &amp; push after every comment / suggestion"><input type="checkbox" id="autoCommit"'+(SEAL.autoCommit?' checked':'')+'> auto-commit on every change</label></div></div>';
-  }
-  // Manual / Slack / email all use the SAME kit: attach the three files + paste
-  // the ready CTA message. The agent prompt tells a connected AI agent to send
-  // via its MCP. No "how do you want to share?" question — every supported path
-  // is shown right here.
+  // Send to reviewers — bundle the files into one zip + one copyable message.
+  // Direct-send buttons appear for whatever channels the launching agent declared
+  // via --mcp (e.g. email, slack). The combined message is captured for copy.
+  let combined='';
   if(isServe){
     const T=SEAL.title||SEAL.srcName||'this document';
     const fmd=SEAL.srcName||'doc.md';
     const fhtml=fmd.replace(/\\.md$/,'.review.html');
     const fseal=fmd.replace(/\\.md$/,'.seal.md');
-    const reviewers=(SEAL.people||[]).map(p=>p&&p.name).filter(Boolean);
-    const who=reviewers.length?reviewers.join(', '):'[reviewers]';
-    const chans=(SEAL.mcp||[]).filter(k=>k==='slack'||k==='email'||k==='github');
-    const chanTxt=chans.length?chans.join(' / '):'Slack / email';
-    const cta='Please review "'+T+'".\\n\\nOpen the attached '+fhtml+' — a self-contained page that opens offline, no install. Add your comments inline.\\nYour notes save into '+fseal+' (the sidecar beside the doc) — that\\'s how they come back to me.';
-    const agentPrompt='Send this Seal review to '+who+' via '+chanTxt+'.\\nAttach all three files: '+fhtml+' (the review page), '+fseal+' (comments sidecar), '+fmd+' (source doc).\\nUse this message:\\n"""\\n'+cta+'\\n"""\\nKeep '+fseal+' with the doc — it is what carries their comments back.';
-    html+='<div class="opt"><b>📤 Send to reviewers</b><p>Manual, Slack or email — same kit. Attach all three files; the sidecar carries their comments back.</p>'+
-      '<ul class="sharefiles">'+
-        '<li><code>'+escapeText(fhtml)+'</code><span class="fnote">review page · opens offline</span></li>'+
-        '<li><code>'+escapeText(fseal)+'</code><span class="fnote">comments + state sidecar</span></li>'+
-        '<li><code>'+escapeText(fmd)+'</code><span class="fnote">source document</span></li>'+
-      '</ul>'+
-      '<div class="copyblock"><div class="cbhd"><span>Message for reviewers</span><button class="btn ghost tiny" data-copytext>Copy message</button></div><textarea class="copytext" readonly rows="5">'+escapeText(cta)+'</textarea></div>'+
-      '<div class="copyblock"><div class="cbhd"><span>Prompt for your AI agent (Slack / email send)</span><button class="btn ghost tiny" data-copytext>Copy prompt</button></div><textarea class="copytext" readonly rows="6">'+escapeText(agentPrompt)+'</textarea></div>'+
-      '<div id="shareFileRow"><button class="btn ghost tiny" id="shareExport">Export '+escapeText(fhtml)+'</button></div></div>';
+    const zipName=fmd.replace(/\\.md$/,'.review-bundle.zip');
+    combined='Please review "'+T+'".\\n\\nOpen '+fhtml+' — self-contained, opens offline, no install. Comment inline; your notes save into '+fseal+' and come straight back to me.\\n\\nAttach: '+fhtml+', '+fseal+', '+fmd+' (or just '+zipName+').';
+    const mcp=SEAL.mcp||[];
+    const chanBtns=
+      (mcp.includes('email')?'<button class="btn ghost tiny" data-sendmcp="email">📧 Send via Email</button>':'')+
+      (mcp.includes('slack')?'<button class="btn ghost tiny" data-sendmcp="slack">💬 Send via Slack</button>':'');
+    html+='<div class="opt"><b>📤 Send to reviewers</b><p>Bundle the files into one zip, paste the message.</p>'+
+      '<div class="sharebtns">'+chanBtns+
+        '<button class="btn ghost tiny" id="bundleGo">⬇ Bundle (.zip)</button>'+
+        '<button class="btn primary tiny" id="copyMsg">Copy message</button></div>'+
+      '<div id="bundleRow"></div></div>';
   }else{
     html+='<div class="opt"><b>📄 Self-contained file</b><p>This page is already the file — send it yourself. Run <code>seal serve</code> for a live link where reviewers comment.</p></div>';
   }
@@ -1308,33 +1299,36 @@ function renderShare(){
       else{toast('Error: '+(j.error||'PR failed'));prGo.textContent='Commit & open PR';prGo.disabled=false;}}
     catch(e){toast('Error: '+e.message);prGo.textContent='Commit & open PR';prGo.disabled=false;}
   };
-  const commitGo=document.getElementById('commitGo');
-  if(commitGo)commitGo.onclick=()=>doCommit(true);
-  const autoCb=document.getElementById('autoCommit');
-  if(autoCb)autoCb.onchange=async()=>{
-    SEAL.autoCommit=autoCb.checked;
-    try{await fetch('/api/autocommit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:autoCb.checked})});}catch(e){}
-    toast(autoCb.checked?'Auto-commit ON — pushes every change':'Auto-commit off');
-    if(autoCb.checked&&SEAL.dirty)doCommit(false);
+  // Copy ONE combined message (no visible text box). Works for email / Slack / DM.
+  const copyMsg=document.getElementById('copyMsg');
+  if(copyMsg)copyMsg.onclick=()=>{
+    const done=()=>{const o=copyMsg.textContent;copyMsg.textContent='Copied ✓';setTimeout(()=>{copyMsg.textContent=o;},1400);toast('Message copied — paste into email / Slack');};
+    if(navigator.clipboard){navigator.clipboard.writeText(combined).then(done).catch(()=>{const t=document.createElement('textarea');t.value=combined;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done();});}
+    else{const t=document.createElement('textarea');t.value=combined;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done();}
   };
-  // copy the CTA message / agent prompt to paste into Slack / email / your agent
-  b.querySelectorAll('[data-copytext]').forEach(btn=>btn.onclick=()=>{
-    const ta=btn.closest('.copyblock').querySelector('textarea');if(!ta)return;
-    const done=()=>{const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>{btn.textContent=o;},1400);toast('Copied — paste into Slack / email / your agent');};
-    if(navigator.clipboard){navigator.clipboard.writeText(ta.value).then(done).catch(()=>{ta.select();document.execCommand('copy');done();});}
-    else{ta.select();document.execCommand('copy');done();}
-  });
-  const ex=document.getElementById('shareExport');
-  if(ex)ex.onclick=async()=>{
-    if(!isServe){toast('This page is already the file');return;}
-    ex.textContent='Exporting…';
-    try{const j=await(await fetch('/api/share',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channels:[]})})).json();
-      const p=j.absPath||j.file;
-      document.getElementById('shareFileRow').innerHTML='<p class="filepath"><code>'+escapeText(p)+'</code></p><div class="filebtns"><button class="btn ghost tiny" id="shareReveal">Show file</button><button class="btn ghost tiny" id="shareCopy">Copy path</button></div>';
-      document.getElementById('shareCopy').onclick=()=>navigator.clipboard.writeText(p).then(()=>toast('Path copied'));
-      document.getElementById('shareReveal').onclick=async()=>{try{const rr=await(await fetch('/api/reveal',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json();toast(rr.ok?'Opened in file manager':'Could not open'+(rr.error?': '+rr.error:''));}catch(e){toast('Error: '+e.message);}};}
+  // Bundle all files into one zip (or hand back the folder path if zip is absent).
+  const bundleGo=document.getElementById('bundleGo');
+  if(bundleGo)bundleGo.onclick=async()=>{
+    bundleGo.disabled=true;const o=bundleGo.textContent;bundleGo.textContent='Bundling…';
+    try{const j=await(await fetch('/api/bundle',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json();
+      const row=document.getElementById('bundleRow');
+      if(j.ok&&j.zip){row.innerHTML='<p class="filepath"><code>'+escapeText(j.zip)+'</code></p><button class="btn ghost tiny" data-reveal="zip">Show in folder</button>';}
+      else if(j.ok){row.innerHTML='<p class="filepath">No <code>zip</code> tool — attach these from <code>'+escapeText(j.dir)+'</code>: '+escapeText((j.files||[]).join(', '))+'</p><button class="btn ghost tiny" data-reveal="dir">Open folder</button>';}
+      else{toast('Error: '+(j.error||'bundle failed'));}
+      const rv=row.querySelector('[data-reveal]');
+      if(rv)rv.onclick=async()=>{try{const rr=await(await fetch('/api/reveal-bundle',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({what:rv.dataset.reveal})})).json();toast(rr.ok?'Opened in file manager':'Could not open'+(rr.error?': '+rr.error:''));}catch(e){toast('Error: '+e.message);}};}
     catch(e){toast('Error: '+e.message);}
+    bundleGo.disabled=false;bundleGo.textContent=o;
   };
+  // Direct send via a connected MCP channel (email / slack) — the agent fulfils it.
+  b.querySelectorAll('[data-sendmcp]').forEach(btn=>btn.onclick=async()=>{
+    const ch=btn.dataset.sendmcp;const o=btn.textContent;btn.disabled=true;btn.textContent='Sending…';
+    const to=(SEAL.people||[]).map(p=>p&&(p.email||p.handle)).filter(Boolean);
+    try{const j=await(await fetch('/api/share',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channels:[ch],to})})).json();
+      toast(j.dispatched?('Sent to your agent to deliver via '+ch):'Exported');}
+    catch(e){toast('Error: '+e.message);}
+    btn.disabled=false;btn.textContent=o;
+  });
 }
 document.getElementById('shareBtn').onclick=()=>{renderShare();shareDlg.hidden=false;};
 
