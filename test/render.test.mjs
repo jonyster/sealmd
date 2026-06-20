@@ -557,9 +557,11 @@ test('renderReviewPage serve+gitRemote shows commit chrome that static lacks', (
   }));
   // the two renders MUST differ
   assert.notEqual(staticHtml, serveHtml, 'serve and static rendered identically');
-  // git/commit chrome appears only when a remote is present (serve capability)
-  assert.ok(serveHtml.includes('id="commitBtn"'), 'commit button missing in serve+remote');
-  assert.ok(!staticHtml.includes('id="commitBtn"'), 'commit button leaked into static');
+  // commit + auto-commit chrome now lives in the Share modal (built client-side
+  // from the embedded data, gated on gitRemote) — the toolbar carries no commit
+  // button in any mode
+  assert.ok(!serveHtml.includes('id="commitBtn"'), 'toolbar commit button should be removed');
+  assert.ok(!staticHtml.includes('id="commitBtn"'), 'commit button must not be in static');
   // mode flag flips in the embedded JSON
   assert.ok(/"mode":"serve"/.test(serveHtml));
   assert.ok(/"mode":"static"/.test(staticHtml));

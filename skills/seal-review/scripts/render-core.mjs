@@ -231,9 +231,10 @@ const ICONS = {
 // AFTER the .lenspills (lead / key decisions / what-this-means / your-call).
 function summaryReadyInner(summary, wordCount) {
   const lead = String(summary.role_lead || summary.lead || '');
-  const kds = summary.key_decisions || [];
-  const secs = summary.relevant_sections || [];
-  const judg = summary.needs_your_judgment || summary.needs_attention || [];
+  // drop blank entries so a partial summary never renders an empty header / row
+  const kds = (summary.key_decisions || []).filter((k) => k && (String(k.label || '').trim() || String(k.value || '').trim()));
+  const secs = (summary.relevant_sections || []).filter((s) => s && (String(s.section || '').trim() || String(s.detail || '').trim()));
+  const judg = (summary.needs_your_judgment || summary.needs_attention || []).filter((n) => String(n || '').trim());
   const keys = kds
     .map((k) => `<li><span class="kk">${escapeHtml(k.label || '')}</span><span class="vv">${renderInline(String(k.value || ''))}</span></li>`).join('\n');
   const rsecs = secs
@@ -399,7 +400,7 @@ export function renderReviewPage({
 
   // ---- client data ----------------------------------------------------------
   const SEAL_JS_DATA = JSON.stringify({
-    summaries: roleMap, labels: roleLabels, defaultSlug,
+    summaries: roleMap, labels: roleLabels, defaultSlug, title: title || srcName,
     docPath, enginePath, srcName, mode, wordCount,
     people: Array.isArray(people) ? people : [],
     mcp: Array.isArray(mcp) ? mcp : [],
@@ -586,8 +587,10 @@ export function renderReviewPage({
   .lensmenu .mhd{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 10px 3px}
   .rolenote{background:var(--amber-soft);color:var(--amber);border-radius:8px;padding:7px 11px;font-size:12.5px;margin:8px 0;display:flex;align-items:center;gap:8px}
   .rolenote b{font-weight:600}
-  .rolenote .copycmd{margin-left:auto;white-space:nowrap;flex-shrink:0}
+  .rolenote .copycmd{white-space:nowrap;flex-shrink:0}
   .rolenote .copycmd code{background:rgba(0,0,0,.18);padding:0 4px;border-radius:3px}
+  .rolenote{flex-wrap:wrap}
+  .rolenote .pastecmd{font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);background:rgba(0,0,0,.22);color:var(--ink,#fff);padding:2px 7px;border-radius:5px;font-size:12px;white-space:nowrap}
   .rolenote .sk-spin{width:13px;height:13px;border:2px solid color-mix(in srgb,var(--amber) 30%,transparent);border-top-color:var(--amber);border-radius:50%;animation:sk-spin .7s linear infinite;flex-shrink:0}
   /* skeleton */
   .summary .prep-tag{display:inline-flex;align-items:center;gap:8px;font-size:18px;line-height:1.55;color:var(--ink);margin:16px 0 0;font-weight:400}
@@ -722,7 +725,15 @@ export function renderReviewPage({
   .sc-email{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;outline:none;color:var(--ink);background:var(--input-fill);margin-bottom:7px}
   .sc-email:focus{border-color:var(--seal);box-shadow:0 0 0 2px var(--seal-soft)}
   .sc-email.autofilled{border-color:var(--seal-line);background:var(--seal-soft)}
-  /* share dialog channels */
+  /* share dialog: send kit (files + copyable message / agent prompt) */
+  .sharefiles{list-style:none;margin:6px 0 10px;padding:0;display:flex;flex-direction:column;gap:5px}
+  .sharefiles li{display:flex;align-items:baseline;gap:8px;font-size:12.5px}
+  .sharefiles code{background:var(--input-fill,rgba(0,0,0,.06));border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--ink);white-space:nowrap}
+  .sharefiles .fnote{color:var(--muted);font-size:11.5px}
+  .copyblock{margin:8px 0;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--panel)}
+  .copyblock .cbhd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;font-size:11.5px;font-weight:600;color:var(--ink-soft);background:var(--fill);border-bottom:1px solid var(--line)}
+  .copyblock textarea.copytext{width:100%;box-sizing:border-box;border:0;outline:none;resize:vertical;padding:9px 10px;font:inherit;font-size:12px;line-height:1.5;color:var(--ink);background:transparent;white-space:pre-wrap}
+  /* share dialog channels (legacy, unused) */
   .sharechans{display:flex;flex-direction:column;gap:7px;margin:4px 0 10px}
   .chanopt{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:var(--r-md);padding:9px 11px;cursor:pointer;font-size:13px}
   .chanopt:hover{background:var(--panel-hover)}
@@ -790,9 +801,7 @@ export function renderReviewPage({
       </div>
       <span class="spacer"></span>
       <button class="ghost owneract" id="editBtn" title="Edit the document (writes doc.md)">✎ Edit</button>
-      ${gitRemote ? `<button class="ghost" id="commitBtn" title="Commit &amp; push the review to ${escapeHtml(gitRemote)}">⬆ Commit &amp; push</button>
-      <label class="autocommit" id="autoWrap" title="Commit &amp; push after every comment / suggestion"><input type="checkbox" id="autoCommit"${autoCommit ? ' checked' : ''}> auto</label>`
-      : canCommit ? `<button class="ghost" id="needRemote" title="This repo has no remote — add one (or paste a repo) to share">↗ Add a repo to share</button>` : ''}
+      ${(!gitRemote && canCommit) ? `<button class="ghost" id="needRemote" title="This repo has no remote — add one (or paste a repo) to share">↗ Add a repo to share</button>` : ''}
       <button class="ghost" id="shareBtn" title="Share this review">↗ Share</button>
       <button class="ghost" id="themeBtn" title="Toggle theme">◐</button>
       <span class="src" title="zero network calls">🔒 offline</span>
@@ -946,11 +955,12 @@ function setStag(label){const b=document.querySelector('#docSummary .stag b');if
 function setLensValue(label){const i=document.getElementById('roleInput');if(i)i.value=label+' summary';}
 function escapeAttr(s){return escapeText(s).replace(/"/g,'&quot;');}
 // ---- sticky, user-editable role pills (persisted per doc) ----
-const PILLS_KEY='seal-pills2:'+(SEAL.docPath||'');
+const PILLS_KEY='seal-pills3:'+(SEAL.docPath||'');
 function defaultPills(){const out=[],seen=new Set();
-  // show the full role taxonomy as pills by default (general first) + any
-  // pre-generated roles. Users prune with × and re-add / type via the ▾ menu.
-  ['general',SEAL.defaultSlug].concat(Object.keys(SEAL.summaries)).concat((SEAL.taxonomy||[]).map(t=>t.slug))
+  // ONLY roles that actually have a generated summary, plus General. We do NOT
+  // seed the full role taxonomy — typing a new role hands you a paste command
+  // (it doesn't auto-generate a pill). Users still prune with ×.
+  ['general',SEAL.defaultSlug].concat(Object.keys(SEAL.summaries))
     .forEach(x=>{if(x&&!seen.has(x)){seen.add(x);out.push(x);}});return out;}
 function loadPills(){try{const v=JSON.parse(localStorage.getItem(PILLS_KEY));if(Array.isArray(v)&&v.length)return v;}catch(e){}return defaultPills();}
 let pillSlugs=loadPills();
@@ -986,69 +996,30 @@ document.addEventListener('click',e=>{if(!lensMenu.hidden&&!e.target.closest('#l
 lensMenu.addEventListener('click',e=>{const it=e.target.closest('.mi');if(!it)return;lensMenu.hidden=true;
   const slug=it.dataset.add,label=it.dataset.label;ensurePill(slug);
   if(SEAL.summaries[slug])applyRole(slug);else gotoRole(label);});
-function showPrepLoader(label){
-  // Don't sit on a bare skeleton — show the nearest baked summary immediately
-  // with a banner, and swap to the tailored one when it's ready.
-  const near=nearestRole(label).hit;
+// No live generation, no spinner, no polling: hand the user the EXACT command to
+// paste into their AI session. The tailored summary appears here after they run
+// it and the page re-renders. Show the nearest baked summary meanwhile.
+function showPasteCommand(label,near){
   const {pills}=clearAfterPills();
-  const note=document.createElement('div');note.className='rolenote';note.id='genBanner';
-  note.innerHTML='<span class="sk-spin" aria-hidden="true"></span><span>Preparing the <b>'+escapeText(label)+'</b> summary — showing <b>'+escapeText(labelFor(near))+'</b> meanwhile. Your agent generates it on its turn.</span><button class="btn ghost tiny copycmd" data-copycmd="/seal-role '+escapeAttr(label)+'">Copy ⌘ for Claude</button>';
+  const cmd='/seal-role "'+label+'"';
+  const note=document.createElement('div');note.className='rolenote';
+  note.innerHTML='<span>No <b>'+escapeText(label)+'</b> summary yet. Paste this into your AI session (Claude Code) to generate one — it shows up here after you run it. Meanwhile you\\'re seeing <b>'+escapeText(labelFor(near))+'</b>.</span>'+
+    '<code class="pastecmd">'+escapeText(cmd)+'</code>'+
+    '<button class="btn ghost tiny copycmd" data-copycmd="'+escapeAttr(cmd)+'">Copy</button>';
   pills.after(note);
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[near]||'';
   pills.parentNode.appendChild(wrap);
-  setStag(label);ensurePill(slugifyRole(label));renderPills(slugifyRole(label));
-}
-function staticFallbackNote(raw,hit){
-  const host=document.getElementById('docSummary');
-  const note=document.createElement('div');note.className='rolenote';
-  note.innerHTML='<span>tailored generation needs the live app or your AI console — showing <b>'+escapeText(labelFor(hit))+'</b> (closest of the baked-in roles to "'+escapeText(raw)+'").</span>';
-  host.querySelector('.lenspills').after(note);
+  setStag(label);setLensValue(label);
 }
 function escapeText(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-// client-side mirror of the server summary-inner template (serve-mode generated roles)
-function renderInlineLite(s){
-  return escapeText(s||'').replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>').replace(/\\*(.+?)\\*/g,'<em>$1</em>')
-    .replace(/\`([^\`]+)\`/g,'<code>$1</code>');
-}
-function renderSummaryInner(summary){
-  const lead=summary.role_lead||summary.lead||'';
-  const kds=summary.key_decisions||[];const secs=summary.relevant_sections||[];
-  const judg=summary.needs_your_judgment||summary.needs_attention||[];
-  let h='<p class="lead">'+renderInlineLite(lead)+'</p>';
-  if(kds.length)h+='<h3>Key decisions</h3><ul class="keys">'+kds.map(k=>'<li><span class="kk">'+escapeText(k.label||'')+'</span><span class="vv">'+renderInlineLite(k.value||'')+'</span></li>').join('')+'</ul>';
-  if(secs.length)h+='<h3>What this means for you</h3><div class="rsecs">'+secs.map(s=>'<div class="rsec"><div class="rsh">'+escapeText(s.section||'')+'</div><div class="rsd">'+renderInlineLite(s.detail||'')+'</div></div>').join('')+'</div>';
-  if(judg.length)h+='<h3>Your call to make</h3>'+judg.map(n=>'<div class="judge"><span class="ji"></span><span>'+renderInlineLite(n)+'</span></div>').join('');
-  h+='<div class="meta2"><span>Full document: <b>'+(SEAL.wordCount||0).toLocaleString()+' words</b></span><span class="sep">·</span><span>written for your role</span></div>';
-  return h;
-}
-// serve-mode generation
-function generateRole(slug,label){
-  showPrepLoader(label);
-  fetch('/api/summary',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:slug,role_label:label})})
-    .then(r=>r.json()).then(j=>{
-      if(j&&j.status==='ready'&&j.summary){SEAL.summaries[j.role||slug]=renderSummaryInner(j.summary);SEAL.labels[j.role||slug]=label;applyRole(j.role||slug);return;}
-      pollSummary(slug,label,0);
-    }).catch(()=>pollSummary(slug,label,0));
-}
-function pollSummary(slug,label,tries){
-  if(tries>=45){const {pills}=clearAfterPills();const n=document.createElement('div');n.className='rolenote';n.innerHTML='<span>No agent picked up <b>'+escapeText(label)+'</b> yet. Run this in Claude Code, then it appears here:</span><button class="btn ghost tiny copycmd" data-copycmd="/seal-role '+escapeAttr(label)+'">Copy <code>/seal-role '+escapeText(label)+'</code></button>';pills.parentNode.appendChild(n);applyRole(nearestRole(label).hit);return;}
-  const delay=Math.min(8000,3000+tries*1500);
-  setTimeout(()=>{
-    fetch('/api/summary?role='+encodeURIComponent(slug),{headers:{'content-type':'application/json'}})
-      .then(r=>r.json()).then(j=>{
-        if(j&&j.status==='ready'&&j.summary){SEAL.summaries[j.role||slug]=renderSummaryInner(j.summary);SEAL.labels[j.role||slug]=label;applyRole(j.role||slug);return;}
-        pollSummary(slug,label,tries+1);
-      }).catch(()=>pollSummary(slug,label,tries+1));
-  },delay);
-}
 function gotoRole(raw){
   const label=raw.trim();if(!label)return;
   const {hit,exact}=nearestRole(label);
   if(exact){applyRole(hit);return;}
-  if(SEAL.mode==='serve'){generateRole(slugifyRole(label),label);return;}
-  // static: nearest baked-in role + honest note
-  applyRole(hit);staticFallbackNote(label,hit);
+  // Unknown role: no auto-generation. Hand over the paste command (both serve
+  // and static) and show the nearest baked summary meanwhile.
+  showPasteCommand(label,hit);
 }
 document.getElementById('docSummary').addEventListener('submit',e=>{
   if(!e.target.closest('#lensForm'))return;e.preventDefault();
@@ -1279,30 +1250,51 @@ function attachMentions(ta){
 }
 attachMentions(scInput);attachMentions(cmtInput);
 
-// ---- Share (multi-select channels, gated on available MCP integrations) ----
+// ---- Share (every supported path shown; no "how do you want to share?") ----
 const shareDlg=document.getElementById('shareDlg');
-const MCP=SEAL.mcp||[];
-const CHAN={github:{ic:'🐙',label:'GitHub',sub:'gist / PR comment with the review'},slack:{ic:'💬',label:'Slack',sub:'post the review to a channel'},email:{ic:'✉️',label:'Email',sub:'send the review to recipients'}};
 document.getElementById('shareClose').onclick=()=>shareDlg.hidden=true;
 shareDlg.addEventListener('click',e=>{if(e.target===shareDlg)shareDlg.hidden=true;});
 function renderShare(){
   const b=document.getElementById('shareBody');
-  const avail=Object.keys(CHAN).filter(k=>MCP.includes(k));
   let html='';
   // GitHub PR via local gh CLI — no MCP needed. Top of the dialog when available.
   if(isServe&&SEAL.canPR){
     html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button></div></div>';
   }
-  if(isServe&&avail.length){
-    html+='<div class="opt"><b>Share via</b><p>Pick one or more — sent through your connected integrations.</p>'+
-      '<div class="sharechans" id="shareChans">'+avail.map(k=>'<label class="chanopt"><input type="checkbox" value="'+k+'"><span class="ci">'+CHAN[k].ic+'</span><span><b>'+CHAN[k].label+'</b><div class="mh" style="font-size:11px;color:var(--muted)">'+CHAN[k].sub+'</div></span></label>').join('')+'</div>'+
-      (avail.includes('email')||avail.includes('slack')?'<input class="sharerecip" id="shareRecip" placeholder="Recipients (emails / @handles, comma-separated)">':'')+
-      '<button class="btn primary tiny" id="shareGo">Share</button></div>';
-  }else if(isServe){
-    html+='<div class="nomcp">No GitHub / Slack / Email <b>MCP</b> connected, so direct send isn\\'t available. Connect one in your AI console to share to those channels. You can still share the file below.</div>';
+  // Commit & push the review to the remote, plus an auto-commit toggle (every
+  // comment/suggestion is committed+pushed). Lives here, not in the toolbar.
+  if(isServe&&SEAL.gitRemote){
+    html+='<div class="opt"><b>⬆ Commit &amp; push</b><p>Push the review (doc + sidecar) to <code>'+escapeText(SEAL.gitRemote)+'</code> so collaborators see it.</p>'+
+      '<div id="commitRow"><button class="btn ghost tiny" id="commitGo">Commit &amp; push now</button>'+
+      '<label class="autocommit" id="autoWrap" title="Commit &amp; push after every comment / suggestion"><input type="checkbox" id="autoCommit"'+(SEAL.autoCommit?' checked':'')+'> auto-commit on every change</label></div></div>';
   }
-  // always: portable file export
-  html+='<div class="opt"><b>📄 Self-contained file</b><p>One offline HTML — opens anywhere, zero network. Send it yourself, or commit <code>'+escapeText(SEAL.srcName.replace(/\\.md$/,'.seal.md'))+'</code> so it shows in the PR.</p><div id="shareFileRow"><button class="btn ghost tiny" id="shareExport">Export file</button></div></div>';
+  // Manual / Slack / email all use the SAME kit: attach the three files + paste
+  // the ready CTA message. The agent prompt tells a connected AI agent to send
+  // via its MCP. No "how do you want to share?" question — every supported path
+  // is shown right here.
+  if(isServe){
+    const T=SEAL.title||SEAL.srcName||'this document';
+    const fmd=SEAL.srcName||'doc.md';
+    const fhtml=fmd.replace(/\\.md$/,'.review.html');
+    const fseal=fmd.replace(/\\.md$/,'.seal.md');
+    const reviewers=(SEAL.people||[]).map(p=>p&&p.name).filter(Boolean);
+    const who=reviewers.length?reviewers.join(', '):'[reviewers]';
+    const chans=(SEAL.mcp||[]).filter(k=>k==='slack'||k==='email'||k==='github');
+    const chanTxt=chans.length?chans.join(' / '):'Slack / email';
+    const cta='Please review "'+T+'".\\n\\nOpen the attached '+fhtml+' — a self-contained page that opens offline, no install. Add your comments inline.\\nYour notes save into '+fseal+' (the sidecar beside the doc) — that\\'s how they come back to me.';
+    const agentPrompt='Send this Seal review to '+who+' via '+chanTxt+'.\\nAttach all three files: '+fhtml+' (the review page), '+fseal+' (comments sidecar), '+fmd+' (source doc).\\nUse this message:\\n"""\\n'+cta+'\\n"""\\nKeep '+fseal+' with the doc — it is what carries their comments back.';
+    html+='<div class="opt"><b>📤 Send to reviewers</b><p>Manual, Slack or email — same kit. Attach all three files; the sidecar carries their comments back.</p>'+
+      '<ul class="sharefiles">'+
+        '<li><code>'+escapeText(fhtml)+'</code><span class="fnote">review page · opens offline</span></li>'+
+        '<li><code>'+escapeText(fseal)+'</code><span class="fnote">comments + state sidecar</span></li>'+
+        '<li><code>'+escapeText(fmd)+'</code><span class="fnote">source document</span></li>'+
+      '</ul>'+
+      '<div class="copyblock"><div class="cbhd"><span>Message for reviewers</span><button class="btn ghost tiny" data-copytext>Copy message</button></div><textarea class="copytext" readonly rows="5">'+escapeText(cta)+'</textarea></div>'+
+      '<div class="copyblock"><div class="cbhd"><span>Prompt for your AI agent (Slack / email send)</span><button class="btn ghost tiny" data-copytext>Copy prompt</button></div><textarea class="copytext" readonly rows="6">'+escapeText(agentPrompt)+'</textarea></div>'+
+      '<div id="shareFileRow"><button class="btn ghost tiny" id="shareExport">Export '+escapeText(fhtml)+'</button></div></div>';
+  }else{
+    html+='<div class="opt"><b>📄 Self-contained file</b><p>This page is already the file — send it yourself. Run <code>seal serve</code> for a live link where reviewers comment.</p></div>';
+  }
   if(!isServe)html+='<div class="opt"><b>🔗 Live + writable</b><p>Run <code>seal serve</code> for a local link where reviewers comment.</p></div>';
   html+='<div class="opt"><b>🌐 Shared link + verified identity</b><p>A hosted link reviewers open from anywhere with sign-in — the <code>seal publish</code> step.</p></div>';
   b.innerHTML=html;
@@ -1316,19 +1308,22 @@ function renderShare(){
       else{toast('Error: '+(j.error||'PR failed'));prGo.textContent='Commit & open PR';prGo.disabled=false;}}
     catch(e){toast('Error: '+e.message);prGo.textContent='Commit & open PR';prGo.disabled=false;}
   };
-  const chans=document.getElementById('shareChans');
-  if(chans)chans.addEventListener('change',e=>{const l=e.target.closest('.chanopt');if(l)l.classList.toggle('on',e.target.checked);});
-  const go=document.getElementById('shareGo');
-  if(go)go.onclick=async()=>{
-    const picked=[...document.querySelectorAll('#shareChans input:checked')].map(i=>i.value);
-    if(!picked.length){toast('Pick a channel');return;}
-    const recip=(document.getElementById('shareRecip')||{}).value||'';
-    const to=recip.split(',').map(s=>s.trim()).filter(Boolean);
-    go.textContent='Sharing…';go.disabled=true;
-    try{const j=await(await fetch('/api/share',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({channels:picked,to})})).json();
-      toast(j.dispatched?'Shared via '+picked.join(', '):'Exported');shareDlg.hidden=true;}
-    catch(e){toast('Error: '+e.message);go.textContent='Share';go.disabled=false;}
+  const commitGo=document.getElementById('commitGo');
+  if(commitGo)commitGo.onclick=()=>doCommit(true);
+  const autoCb=document.getElementById('autoCommit');
+  if(autoCb)autoCb.onchange=async()=>{
+    SEAL.autoCommit=autoCb.checked;
+    try{await fetch('/api/autocommit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:autoCb.checked})});}catch(e){}
+    toast(autoCb.checked?'Auto-commit ON — pushes every change':'Auto-commit off');
+    if(autoCb.checked&&SEAL.dirty)doCommit(false);
   };
+  // copy the CTA message / agent prompt to paste into Slack / email / your agent
+  b.querySelectorAll('[data-copytext]').forEach(btn=>btn.onclick=()=>{
+    const ta=btn.closest('.copyblock').querySelector('textarea');if(!ta)return;
+    const done=()=>{const o=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>{btn.textContent=o;},1400);toast('Copied — paste into Slack / email / your agent');};
+    if(navigator.clipboard){navigator.clipboard.writeText(ta.value).then(done).catch(()=>{ta.select();document.execCommand('copy');done();});}
+    else{ta.select();document.execCommand('copy');done();}
+  });
   const ex=document.getElementById('shareExport');
   if(ex)ex.onclick=async()=>{
     if(!isServe){toast('This page is already the file');return;}
@@ -1369,24 +1364,19 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-copycmd]')
   e.preventDefault();const cmd=b.getAttribute('data-copycmd');
   (navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast('Copied — paste in Claude Code: '+cmd)).catch(()=>{prompt('Copy this into Claude Code:',cmd);});});
 
-// ---- git: commit & push from the page + auto-commit + close handling ----
-const commitBtn=document.getElementById('commitBtn'), autoCb=document.getElementById('autoCommit');
+// ---- git: commit & push from the SHARE modal + auto-commit + close handling ----
+// The commit/auto controls live in the Share dialog (renderShare wires their
+// click/change). doCommit looks up the modal button live since it's re-rendered.
 async function doCommit(loud){
-  if(commitBtn){commitBtn.disabled=true;commitBtn.textContent='⬆ …';}
+  const cg=document.getElementById('commitGo');
+  if(cg){cg.disabled=true;cg.textContent='Committing…';}
   try{const j=await(await fetch('/api/commit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({push:true})})).json();
     if(j.ok){SEAL.dirty=false;
       if(loud)toast(j.committed?(j.pushed?'Committed & pushed ✓':'Committed ✓ ('+(j.push_error||'no remote — not pushed')+')'):'Nothing to commit');}
     else if(loud)toast('Error: '+(j.error||'commit failed'));}
   catch(e){if(loud)toast('Commit error: '+e.message);}
-  if(commitBtn){commitBtn.disabled=false;commitBtn.innerHTML='⬆ Commit &amp; push';}
+  if(cg){cg.disabled=false;cg.textContent='Commit & push now';}
 }
-if(commitBtn)commitBtn.onclick=()=>doCommit(true);
-if(autoCb)autoCb.onchange=async()=>{
-  SEAL.autoCommit=autoCb.checked;
-  try{await fetch('/api/autocommit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:autoCb.checked})});}catch(e){}
-  toast(autoCb.checked?'Auto-commit ON — pushes every comment':'Auto-commit off');
-  if(autoCb.checked&&SEAL.dirty)doCommit(false);
-};
 // "Add a repo to share" — repo has no remote, so committing wouldn't share anything
 const needRemote=document.getElementById('needRemote');
 if(needRemote)needRemote.onclick=()=>toast('No git remote — commits would stay on this machine. Ask your agent to connect a repo (git remote add origin <url>), or open the review from a cloned repo to share.');
