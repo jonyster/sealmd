@@ -9,12 +9,15 @@ Open the existing review for a doc. Engine:
 
 **Pick the doc — ALWAYS show an options menu (`AskUserQuestion`); never just
 yes/no-confirm one guess.** If `$ARGUMENTS` has a `.md` path or git URL, use it;
-otherwise present:
-- **Docs that already have a review** — glob for `*.seal.md` and list the matching
-  `.md` docs (these are the openable ones).
-- **"Git link / URL"** — paste a repo URL; `git clone` it and open the review
-  inside the clone.
-- **"Other"** → type/browse a path.
+otherwise present (4 slots + auto "Other"; **always reserve "Git link / URL" and
+"Browse local files"**):
+- **Docs that already have a review** (≤2) — glob `*.seal.md` and list the matching
+  `.md` docs (the openable ones).
+- **"Git link / URL"** (always) — paste a repo URL; `git clone` it and open the
+  review inside the clone.
+- **"Browse local files"** (always) — list/`ls` `*.seal.md` reviews to navigate, or
+  accept a typed path.
+- **"Other"** → type a path directly.
 Call the chosen doc `DOC`.
 
 - Run **`seal start DOC`** as a **background task** and give the user the

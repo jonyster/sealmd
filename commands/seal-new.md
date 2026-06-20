@@ -13,12 +13,16 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
 
 1. **Pick the doc — ALWAYS show an options menu (`AskUserQuestion`); never just
    yes/no-confirm one guess.** If `$ARGUMENTS` has a `.md` path or git URL, use it;
-   otherwise glob `**/*.md` and present:
-   - **Top local `.md` candidates** — labelled by name + path, to pick/browse.
-   - **"Git link / URL"** — paste a repo URL or `.md` link; for a repo/remote
-     `git clone <url>` locally and review *inside the clone* (sidecar commits back
-     = shareable); a bare raw-file URL is **local-only**.
-   - **"Other"** → type/browse a path.
+   otherwise glob `**/*.md` and present. `AskUserQuestion` has only 4 option slots
+   (+ auto "Other") — **always reserve two for "Git link / URL" and "Browse local
+   files"**; use ≤2 for top local candidates.
+   - **≤2 top local `.md` candidates** (name + path).
+   - **"Git link / URL"** (always) — repo URL or `.md` link; for a repo/remote
+     `git clone <url>` locally and review *inside the clone* (review file commits
+     back = shareable); a bare raw-file URL is **local-only**.
+   - **"Browse local files"** (always) — list/`ls` the repo's `.md` files to
+     navigate, or accept a typed path.
+   - **"Other"** → type a path directly.
    Call the chosen path `DOC`. If `<DOC>.seal.md` already exists, ask before
    overwriting (`init --force`).
 2. **Owner** — default `git config user.name`; confirm, or ask who owns sign-off if git has none.

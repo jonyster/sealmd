@@ -35,13 +35,20 @@ ENGINE (use ONLY this — the sealmd plugin's CLI):
 **Pick the doc — ALWAYS show an options menu (`AskUserQuestion`); never just
 yes/no-confirm a single guessed doc.** (This applies to `/sealmd`, `/seal-new`,
 and `/seal-open` alike.) If `$ARGUMENTS` already has a `.md` path or a git URL,
-use it directly; otherwise glob the project's `.md` files and ask, with options:
-- **Top local `.md` candidates** — a few, labelled by name + path, to pick/browse.
-- **"Git link / URL"** — paste a git repo URL or a link to a `.md`. For a
-  repo/remote, **`git clone <url>` locally first** and review the doc *inside the
-  clone* (so the review file commits + pushes back = shareable); a bare raw-file URL is
-  fetched but **local-only** (can't commit the review file back).
-- **"Other"** → type/browse a path.
+use it directly; otherwise glob the project's `.md` files and ask.
+
+⚠️ `AskUserQuestion` allows **only 4 options** (+ an automatic "Other"). **Always
+reserve two slots: "Git link / URL" and "Browse local files."** Use the other ≤2
+slots for the top local `.md` candidates. Never fill all 4 with candidate files.
+- **≤2 top local `.md` candidates** — labelled by name + path.
+- **"Git link / URL"** (always present) — the user pastes a git repo URL or a link
+  to a `.md`. For a repo/remote, **`git clone <url>` locally first** and review the
+  doc *inside the clone* (so the review file commits + pushes back = shareable); a
+  bare raw-file URL is fetched but **local-only**.
+- **"Browse local files"** (always present) — they want a different local file:
+  glob/list the repo's `.md` files (or `ls` folders to navigate) and ask again, or
+  accept a typed path.
+- **"Other"** (the automatic slot) → type a path directly.
 
 Only after they pick, call it `DOC`. Existing = `<DOC>.seal.md` exists
 (`seal status --in DOC --json` succeeds).
