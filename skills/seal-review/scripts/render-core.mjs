@@ -20,7 +20,7 @@
 // sealmd extras production lacks (kept, restyled native):
 //   - select-text -> Comment composer (.selcompose) + serve POST /api/comment
 //     vs static "copy for agent" fallback
-//   - view/scroll/role persistence across the post-save location.reload()
+//   - view/scroll/role persistence across the post-save (window.__sealReloading=true,location.reload())
 //
 // Zero dependencies, pure ESM, self-contained (inline CSS/JS, no network refs).
 // system-ui font stack (Roboto first if locally installed; no webfont fetch).
@@ -1171,7 +1171,7 @@ scPost.onclick=async()=>{
     const payload={author:cAuthor||'me',body:scInput.value.trim(),anchor:curQuote||null,suggestion:curMode==='suggest'?scSuggest.value.trim():undefined,email:(scEmail&&scEmail.value.trim())||undefined};
     try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const j=await res.json();
       if(j.ok){toast('Comment saved');sc.hidden=true;scInput.value='';scSuggest.value='';
-        try{sessionStorage.setItem('seal-scroll',window.scrollY)}catch(e){}setTimeout(()=>location.reload(),650);}
+        try{sessionStorage.setItem('seal-scroll',window.scrollY)}catch(e){}setTimeout(()=>(window.__sealReloading=true,location.reload()),650);}
       else toast('Error: '+(j.error||'unknown'));}
     catch(e){toast('Server error: '+e.message);}
     return;
@@ -1195,7 +1195,7 @@ if(cmtPost){
     if(isServe){
       const cmtEmail=document.getElementById('cmtEmail');
       try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({author:who,body:bodyTxt,anchor:null,email:(cmtEmail&&cmtEmail.value.trim())||undefined})});const j=await res.json();
-        if(j.ok){toast('Comment saved');cmtInput.value='';try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>location.reload(),650);}
+        if(j.ok){toast('Comment saved');cmtInput.value='';try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>(window.__sealReloading=true,location.reload()),650);}
         else toast('Error: '+(j.error||'unknown'));}
       catch(e){toast('Server error: '+e.message);}
       return;
@@ -1302,9 +1302,9 @@ function renderShare(){
       '<div id="bundleRow"></div></div>';
     // Email — its own section. Opens a draft in the user's mail app, recipients +
     // message prefilled; they attach the bundle and hit send. Always available.
-    html+='<div class="opt"><b>📧 Email</b><p>Opens a draft in your mail app — recipients &amp; message prefilled. Attach the bundle from above, then send.</p>'+
+    html+='<div class="opt"><b>📧 Email</b><p>Sends through Resend (set <code>SEAL_RESEND_KEY</code>) with the bundle attached. No key? It opens a prefilled draft in your mail app instead.</p>'+
       '<input class="sharerecip" id="emailTo" placeholder="Recipients (comma-separated)" value="'+escapeText(mailTo)+'">'+
-      '<button class="btn primary tiny" id="emailGo">✉️ Open email draft</button></div>';
+      '<button class="btn primary tiny" id="emailGo">✉️ Send email</button></div>';
     // Slack — hand to the agent if a Slack MCP was declared; else copy the message.
     if(mcp.includes('slack')){
       html+='<div class="opt"><b>💬 Slack</b><p>Post the review to Slack via your connected agent.</p><button class="btn ghost tiny" data-sendmcp="slack">Send via Slack</button></div>';
@@ -1332,14 +1332,20 @@ function renderShare(){
     if(navigator.clipboard){navigator.clipboard.writeText(combined).then(done).catch(()=>{const t=document.createElement('textarea');t.value=combined;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done();});}
     else{const t=document.createElement('textarea');t.value=combined;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done();}
   };
-  // Email — open a prefilled draft in the user's mail client (always works; no
-  // backend / MCP needed). They attach the bundle and hit send.
+  // Email — real send via Resend when configured (bundle attached); otherwise
+  // fall back to opening a prefilled draft in the user's mail client.
   const emailGo=document.getElementById('emailGo');
-  if(emailGo)emailGo.onclick=()=>{
-    const to=((document.getElementById('emailTo')||{}).value||'').trim();
-    const href='mailto:'+to+'?subject='+encodeURIComponent(mailSubj)+'&body='+encodeURIComponent(combined);
-    window.location.href=href;
-    toast(to?'Opening your mail app…':'Opening your mail app — add recipients');
+  if(emailGo)emailGo.onclick=async()=>{
+    const to=(((document.getElementById('emailTo')||{}).value)||'').split(',').map(s=>s.trim()).filter(Boolean);
+    const draft=()=>{window.location.href='mailto:'+to.join(',')+'?subject='+encodeURIComponent(mailSubj)+'&body='+encodeURIComponent(combined);};
+    const o=emailGo.textContent;emailGo.disabled=true;emailGo.textContent='Sending…';
+    try{
+      const j=await(await fetch('/api/send-email',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({to,subject:mailSubj,body:combined})})).json();
+      if(j.ok&&j.sent){toast('Email sent ✓'+(j.attached?' · bundle attached':'')+' → '+to.join(', '));}
+      else if(j.reason==='no-recipients'){toast('Add at least one recipient');}
+      else{draft();toast(j.reason==='no-resend-key'?'No Resend key — opened a draft instead':'Opened a draft');}
+    }catch(e){draft();toast('Opened a draft');}
+    emailGo.disabled=false;emailGo.textContent=o;
   };
   // Bundle all files into one zip (or hand back the folder path if zip is absent).
   const bundleGo=document.getElementById('bundleGo');
@@ -1371,7 +1377,7 @@ document.getElementById('shareBtn').onclick=()=>{renderShare();shareDlg.hidden=f
 if(isServe)document.body.classList.add('can-edit');
 async function ownerPost(url,payload,msg){
   try{const j=await(await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)})).json();
-    if(j&&j.ok){toast(msg);try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>location.reload(),600);}
+    if(j&&j.ok){toast(msg);try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>(window.__sealReloading=true,location.reload()),600);}
     else toast('Error: '+((j&&j.error)||'failed'));}
   catch(e){toast('Server error: '+e.message);}
 }
@@ -1382,7 +1388,7 @@ document.addEventListener('click',e=>{
 // edit the document (raw Markdown) — Save writes doc.md
 const editBtn=document.getElementById('editBtn'),editBar=document.getElementById('editBar'),docMdEl=document.getElementById('docMd');
 if(editBtn)editBtn.onclick=()=>{setView('md');docMdEl.contentEditable='true';docMdEl.classList.add('editing');editBar.hidden=false;docMdEl.focus();};
-var editCancelB=document.getElementById('editCancel');if(editCancelB)editCancelB.onclick=()=>location.reload();
+var editCancelB=document.getElementById('editCancel');if(editCancelB)editCancelB.onclick=()=>(window.__sealReloading=true,location.reload());
 var editSaveB=document.getElementById('editSave');if(editSaveB)editSaveB.onclick=async()=>{
   const md=docMdEl.innerText;if(!md.trim()){toast('Empty — not saving');return;}
   await ownerPost('/api/doc',{markdown:md},'Saved to doc.md');
@@ -1414,6 +1420,9 @@ if(needRemote)needRemote.onclick=()=>toast('No git remote — commits would stay
 // the AI console so it knows the browser closed.
 window.addEventListener('beforeunload',function(e){
   try{navigator.sendBeacon('/api/closing','{}');}catch(_){}
+  // skip the unsaved-changes nag on the app's OWN reloads (after a comment /
+  // accept / dismiss) — only warn on a real tab close / navigation away.
+  if(window.__sealReloading)return;
   if(SEAL.gitRemote&&SEAL.dirty&&!SEAL.autoCommit){e.preventDefault();e.returnValue='You have uncommitted review changes — Commit & push before leaving?';return e.returnValue;}
 });
 

@@ -195,9 +195,9 @@ test('commit --push with no remote => committed true, pushed false, exit 0', () 
 // ===========================================================================
 // Spawn `seal serve` and wait for the serve_started SEAL_EVENT on stdout.
 // Collects every SEAL_EVENT seen so tests can assert emitted event shapes.
-function startServer({ cwd, doc, port }) {
+function startServer({ cwd, doc, port, env = {} }) {
   const child = spawn(process.execPath, [SEAL, 'serve', '--in', doc, '--port', String(port)], {
-    cwd, env: { ...process.env, CI: '1', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd, env: { ...process.env, CI: '1', NO_COLOR: '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   const events = [];
   let stdoutBuf = '';
@@ -365,6 +365,28 @@ test('serve: POST /api/bundle bundles all shareable files into one zip', async (
       // graceful fallback: no zip tool, hand back the folder instead
       assert.ok(json.dir && existsSync(json.dir), 'fallback returns the folder path');
     }
+  } finally {
+    await srv.stop();
+    ws.cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 9c. POST /api/send-email without SEAL_RESEND_KEY => sent:false (draft fallback)
+// ---------------------------------------------------------------------------
+test('serve: POST /api/send-email without Resend key => ok, sent:false, no-resend-key', async () => {
+  const ws = makeWorkspace({ git: true });
+  runSeal(['init', '--in', ws.doc], { cwd: ws.dir });
+  const port = nextPort();
+  // explicitly ensure no key is present in the server env
+  const srv = startServer({ cwd: ws.dir, doc: ws.doc, port, env: { SEAL_RESEND_KEY: '' } });
+  try {
+    await srv.ready;
+    const { status, json } = await postJSON(port, '/api/send-email', { to: ['a@co.com'], subject: 'Review', body: 'hi' });
+    assert.equal(status, 200);
+    assert.equal(json.ok, true);
+    assert.equal(json.sent, false);
+    assert.equal(json.reason, 'no-resend-key');
   } finally {
     await srv.stop();
     ws.cleanup();

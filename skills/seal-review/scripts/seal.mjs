@@ -39,7 +39,7 @@ import { dirname, basename, relative } from 'node:path';
 import { normalizeMarkdown, contentHash } from './anchor.mjs';
 import { renderReviewPage, deriveSummary } from './render-core.mjs';
 import { resolveMentions, notifyEnabled, dispatch as notifyDispatch, makeDigest, resolvePerson,
-  sendSlack, sendTeams, sendEmail, formatEvent, extractPeople } from './notify.mjs';
+  sendSlack, sendTeams, sendEmail, sendEmailRich, formatEvent, extractPeople } from './notify.mjs';
 
 function buildNotifyCfg(doc) {
   const p = readNotifyPrefs(doc); const e = process.env;
@@ -456,6 +456,28 @@ function regen(doc, r) {
   const out = htmlPath(doc);
   writeFileSync(out, buildPage(doc, r), 'utf8');
   return out;
+}
+// Freshly export the review HTML, then zip it with the sidecar + source .md
+// (+ summaries) into one attachable archive. Returns { zip|null, dir, files, names }.
+// zip===null means the `zip` tool is absent — caller hands back the folder instead.
+function makeBundle(doc) {
+  const { r } = loadSidecar(doc);
+  const htmlFile = htmlPath(doc);
+  writeFileSync(htmlFile, buildPage(doc, r, { mode: 'static' }), 'utf8');
+  const parts = [htmlFile, doc, sidecarPath(doc)];
+  const sj = summaryFilePath(doc); if (existsSync(sj)) parts.push(sj);
+  const files = parts.filter((f) => existsSync(f));
+  const dir = dirname(realpathSync(doc));
+  const base = basename(doc).replace(/\.md$/i, '');
+  const zipPath = `${dir}/${base}.review-bundle.zip`;
+  const names = files.map((f) => basename(f));
+  try {
+    try { execFileSync('rm', ['-f', zipPath]); } catch {}
+    execFileSync('zip', ['-j', '-q', zipPath, ...files], { cwd: dir });
+    return { zip: zipPath, dir, files, names };
+  } catch {
+    return { zip: null, dir, files, names };
+  }
 }
 function maybeOpen(htmlFile) {
   if (!htmlFile || !flag('open')) return;
@@ -987,25 +1009,25 @@ function cmdServe() {
       // into ONE zip for the user to attach. Falls back to the folder path if the
       // `zip` tool isn't present. Paths recomputed server-side.
       if (req.method === 'POST' && url.pathname === '/api/bundle') {
-        const { r } = loadSidecar(doc);
-        const htmlFile = htmlPath(doc);
-        writeFileSync(htmlFile, buildPage(doc, r, { mode: 'static' }), 'utf8');     // fresh export
-        const parts = [htmlFile, doc, sidecarPath(doc)];
-        const sj = summaryFilePath(doc); if (existsSync(sj)) parts.push(sj);
-        const files = parts.filter((f) => existsSync(f));
-        const dir = dirname(realpathSync(doc));
-        const base = basename(doc).replace(/\.md$/i, '');
-        const zipPath = `${dir}/${base}.review-bundle.zip`;
-        const names = files.map((f) => basename(f));
-        try {
-          try { execFileSync('rm', ['-f', zipPath]); } catch {}
-          execFileSync('zip', ['-j', '-q', zipPath, ...files], { cwd: dir });
-          emitEvent({ type: 'bundle_ready', zip: zipPath, files: names, doc });
-          return J(res, 200, { ok: true, zip: zipPath, dir, files: names });
-        } catch {
-          // no `zip` available — hand back the folder + file list instead
-          return J(res, 200, { ok: true, zip: null, dir, files: names });
-        }
+        const bnd = makeBundle(doc);
+        if (bnd.zip) emitEvent({ type: 'bundle_ready', zip: bnd.zip, files: bnd.names, doc });
+        return J(res, 200, { ok: true, zip: bnd.zip, dir: bnd.dir, files: bnd.names });
+      }
+      // actually SEND the review by email via Resend (SEAL_RESEND_KEY), with the
+      // bundle attached. Returns { sent:false, reason } when not configured so the
+      // page can fall back to opening a local mail draft.
+      if (req.method === 'POST' && url.pathname === '/api/send-email') {
+        const b = await readBody(req);
+        const ncfg = buildNotifyCfg(doc);
+        const to = (Array.isArray(b.to) ? b.to : String(b.to || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
+        if (!ncfg.email.resendKey) return J(res, 200, { ok: true, sent: false, reason: 'no-resend-key' });
+        if (!to.length) return J(res, 200, { ok: true, sent: false, reason: 'no-recipients' });
+        const bnd = makeBundle(doc);
+        const attachments = bnd.zip
+          ? [{ filename: basename(bnd.zip), content: readFileSync(bnd.zip).toString('base64') }] : [];
+        const r = await sendEmailRich(ncfg.email, { to, subject: b.subject || 'Seal review', text: b.body || '', attachments });
+        if (r.ok) { emitEvent({ type: 'email_sent', to, doc, attached: attachments.length > 0 }); return J(res, 200, { ok: true, sent: true, to, attached: attachments.length > 0 }); }
+        return J(res, 200, { ok: true, sent: false, reason: r.error || 'send-failed' });
       }
       // reveal an arbitrary review artifact (zip / folder) — POST { what:'zip'|'dir' }
       if (req.method === 'POST' && url.pathname === '/api/reveal-bundle') {

@@ -113,6 +113,21 @@ export async function sendEmail(email, subject, text) {
     { authorization: `Bearer ${email.resendKey}` });
 }
 
+// Like sendEmail but takes explicit recipients and optional file attachments
+// ([{ filename, content }] where content is base64). Used by the live "Send via
+// Email" share action to deliver the review + bundle in one real email.
+export async function sendEmailRich(email, { to, subject, text, attachments = [] } = {}) {
+  const recipients = (Array.isArray(to) ? to : (to ? [to] : [])).filter(Boolean);
+  if (!recipients.length) return { ok: false, error: 'no recipients' };
+  if (!email || !email.resendKey) return { ok: false, error: 'email not configured' };
+  const payload = {
+    from: email.from, to: recipients, subject: subject || 'Seal review',
+    text: text || '', html: `<pre style="font:14px ui-sans-serif">${escapeHtmlText(text || '')}</pre>`,
+  };
+  if (attachments.length) payload.attachments = attachments.map((a) => ({ filename: a.filename, content: a.content }));
+  return post('https://api.resend.com/emails', payload, { authorization: `Bearer ${email.resendKey}` });
+}
+
 // ---- message formatting ----------------------------------------------------
 export function formatEvent(ev, link) {
   const who = ev.author || ev.approver || 'someone';

@@ -11,7 +11,7 @@ const NOTIFY = join(HERE, '..', 'skills', 'seal-review', 'scripts', 'notify.mjs'
 const {
   extractPeople, parseMentions, resolvePerson, resolveMentions,
   notifyConfig, notifyEnabled, formatEvent, makeDigest,
-  sendSlack, sendTeams, sendEmail, dispatch,
+  sendSlack, sendTeams, sendEmail, sendEmailRich, dispatch,
 } = await import(NOTIFY);
 
 // arg() factory mirroring how seal.mjs feeds notifyConfig: a flag lookup.
@@ -444,6 +444,47 @@ test('post() swallows fetch rejection into {ok:false,error} (via sendSlack)', as
   } finally {
     fetchMock.mock.restore();
   }
+});
+
+// ---------------------------------------------------------------------------
+// sendEmailRich — explicit recipients + attachments, config-gated
+// ---------------------------------------------------------------------------
+test('sendEmailRich: no recipients => error, no fetch', async () => {
+  const fetchMock = mock.method(globalThis, 'fetch', async () => { throw new Error('should not fetch'); });
+  try {
+    assert.deepEqual(await sendEmailRich({ resendKey: 'k', from: 'f@co.com' }, { to: [], subject: 's', text: 't' }),
+      { ok: false, error: 'no recipients' });
+    assert.equal(fetchMock.mock.callCount(), 0);
+  } finally { fetchMock.mock.restore(); }
+});
+
+test('sendEmailRich: recipients but no resendKey => not configured, no fetch', async () => {
+  const fetchMock = mock.method(globalThis, 'fetch', async () => { throw new Error('should not fetch'); });
+  try {
+    assert.deepEqual(await sendEmailRich({ from: 'f@co.com' }, { to: ['a@co.com'], subject: 's', text: 't' }),
+      { ok: false, error: 'email not configured' });
+    assert.equal(fetchMock.mock.callCount(), 0);
+  } finally { fetchMock.mock.restore(); }
+});
+
+test('sendEmailRich: posts to Resend with recipients + base64 attachment (fetch stubbed)', async () => {
+  const calls = [];
+  const fetchMock = mock.method(globalThis, 'fetch', async (url, opts) => { calls.push({ url, opts }); return { ok: true, status: 200 }; });
+  try {
+    await sendEmailRich({ from: 'f@co.com', resendKey: 'rk' }, {
+      to: ['a@co.com', 'b@co.com'], subject: 'Review: X', text: 'body <b>here</b>',
+      attachments: [{ filename: 'r.zip', content: 'QkFTRTY0' }],
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://api.resend.com/emails');
+    const body = JSON.parse(calls[0].opts.body);
+    assert.deepEqual(body.to, ['a@co.com', 'b@co.com']);
+    assert.equal(body.subject, 'Review: X');
+    assert.match(body.html, /&lt;b&gt;/, 'html body is escaped');
+    assert.equal(body.attachments[0].filename, 'r.zip');
+    assert.equal(body.attachments[0].content, 'QkFTRTY0');
+    assert.equal(calls[0].opts.headers.authorization, 'Bearer rk');
+  } finally { fetchMock.mock.restore(); }
 });
 
 // ---------------------------------------------------------------------------
