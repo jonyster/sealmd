@@ -1282,9 +1282,9 @@ function renderShare(){
     html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button></div></div>';
   }
   // Send to reviewers — bundle the files into one zip + one copyable message.
-  // Direct-send buttons appear for whatever channels the launching agent declared
-  // via --mcp (e.g. email, slack). The combined message is captured for copy.
-  let combined='';
+  // Email gets its OWN section below (opens a prefilled draft). combined/mailSubj/
+  // mailTo are captured for the handlers.
+  let combined='', mailSubj='', mailTo='';
   if(isServe){
     const T=SEAL.title||SEAL.srcName||'this document';
     const fmd=SEAL.srcName||'doc.md';
@@ -1292,15 +1292,23 @@ function renderShare(){
     const fseal=fmd.replace(/\\.md$/,'.seal.md');
     const zipName=fmd.replace(/\\.md$/,'.review-bundle.zip');
     combined='Please review "'+T+'".\\n\\nOpen '+fhtml+' — self-contained, opens offline, no install. Comment inline; your notes save into '+fseal+' and come straight back to me.\\n\\nAttach: '+fhtml+', '+fseal+', '+fmd+' (or just '+zipName+').';
+    mailSubj='Review: '+T;
+    mailTo=(SEAL.people||[]).map(p=>p&&p.email).filter(Boolean).join(', ');
     const mcp=SEAL.mcp||[];
-    const chanBtns=
-      (mcp.includes('email')?'<button class="btn ghost tiny" data-sendmcp="email">📧 Send via Email</button>':'')+
-      (mcp.includes('slack')?'<button class="btn ghost tiny" data-sendmcp="slack">💬 Send via Slack</button>':'');
     html+='<div class="opt"><b>📤 Send to reviewers</b><p>Bundle the files into one zip, paste the message.</p>'+
-      '<div class="sharebtns">'+chanBtns+
+      '<div class="sharebtns">'+
         '<button class="btn ghost tiny" id="bundleGo">⬇ Bundle (.zip)</button>'+
         '<button class="btn primary tiny" id="copyMsg">Copy message</button></div>'+
       '<div id="bundleRow"></div></div>';
+    // Email — its own section. Opens a draft in the user's mail app, recipients +
+    // message prefilled; they attach the bundle and hit send. Always available.
+    html+='<div class="opt"><b>📧 Email</b><p>Opens a draft in your mail app — recipients &amp; message prefilled. Attach the bundle from above, then send.</p>'+
+      '<input class="sharerecip" id="emailTo" placeholder="Recipients (comma-separated)" value="'+escapeText(mailTo)+'">'+
+      '<button class="btn primary tiny" id="emailGo">✉️ Open email draft</button></div>';
+    // Slack — hand to the agent if a Slack MCP was declared; else copy the message.
+    if(mcp.includes('slack')){
+      html+='<div class="opt"><b>💬 Slack</b><p>Post the review to Slack via your connected agent.</p><button class="btn ghost tiny" data-sendmcp="slack">Send via Slack</button></div>';
+    }
   }else{
     html+='<div class="opt"><b>📄 Self-contained file</b><p>This page is already the file — send it yourself. Run <code>seal serve</code> for a live link where reviewers comment.</p></div>';
   }
@@ -1323,6 +1331,15 @@ function renderShare(){
     const done=()=>{const o=copyMsg.textContent;copyMsg.textContent='Copied ✓';setTimeout(()=>{copyMsg.textContent=o;},1400);toast('Message copied — paste into email / Slack');};
     if(navigator.clipboard){navigator.clipboard.writeText(combined).then(done).catch(()=>{const t=document.createElement('textarea');t.value=combined;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done();});}
     else{const t=document.createElement('textarea');t.value=combined;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();done();}
+  };
+  // Email — open a prefilled draft in the user's mail client (always works; no
+  // backend / MCP needed). They attach the bundle and hit send.
+  const emailGo=document.getElementById('emailGo');
+  if(emailGo)emailGo.onclick=()=>{
+    const to=((document.getElementById('emailTo')||{}).value||'').trim();
+    const href='mailto:'+to+'?subject='+encodeURIComponent(mailSubj)+'&body='+encodeURIComponent(combined);
+    window.location.href=href;
+    toast(to?'Opening your mail app…':'Opening your mail app — add recipients');
   };
   // Bundle all files into one zip (or hand back the folder path if zip is absent).
   const bundleGo=document.getElementById('bundleGo');
