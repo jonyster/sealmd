@@ -678,6 +678,29 @@ function cmdRender() {
 
 function cmdHash() { out({ ok: true, action: 'hash', content_hash: liveHash(docPath()) }); }
 
+// Stage the review's committable files (doc + review file + role summaries) and
+// commit — the shareable artifacts. Never touches the gitignored derived/secret
+// files. `--push` to push. `-m "msg"` for a message.
+function cmdCommit() {
+  const doc = docPath();
+  const git = gitInfo(dirname(doc));
+  if (!git.inRepo) die('not a git repo — this review is local-only / not shareable. Run `git init` first.');
+  const sp = sidecarPath(doc);
+  if (!existsSync(sp)) die(`no review file at ${sp} — run \`seal init --in ${doc}\` first`);
+  const files = [doc, sp];
+  const sj = summaryFilePath(doc); if (existsSync(sj)) files.push(sj);
+  const rel = files.map((f) => { try { return relative(git.root, realpathSync(f)); } catch { return f; } });
+  const G = (args, opts = {}) => execFileSync('git', args, { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...opts });
+  try { G(['add', '--', ...rel]); } catch (e) { die(`git add failed: ${e.message}`); }
+  const dashM = (() => { const i = process.argv.indexOf('-m'); return i !== -1 ? process.argv[i + 1] : null; })();
+  const msg = arg('message') || arg('m') || dashM || `seal: review ${basename(doc)}`;
+  let committed = false;
+  try { G(['commit', '-m', msg]); committed = true; } catch { /* nothing to commit */ }
+  let pushed = false, pushError = null;
+  if (committed && flag('push')) { try { G(['push']); pushed = true; } catch (e) { pushError = String(e.message || e).split('\n')[0]; } }
+  out({ ok: true, action: 'commit', committed, pushed, push_error: pushError, files: rel, message: committed ? msg : null, remote: git.remote, note: committed ? null : 'nothing to commit (no changes since last commit)' });
+}
+
 // Role summaries the live page requested but that don't exist yet. The agent
 // drains this (generate each + `seal summary`) — works even if it missed the
 // live SEAL_EVENT (e.g. wasn't watching the background task at that instant).
@@ -935,6 +958,7 @@ Usage: node seal.mjs <command> --in <doc.md> [opts]
   serve     live local review — the page writes the sidecar  [--port N] [--open] [--notify-cmd CMD]
   summary   write a role-tailored summary  --role "Label" [--file j.json | --json '…' | stdin]
   pending   list role summaries the live page requested but that don't exist yet  [--json]
+  commit    stage + commit the review (doc + .seal.md + summaries) to git  [-m "msg"] [--push]
   hash      print bare-hex content hash
   doctor    validate the sidecar (read-only)               [--json]
 
@@ -963,6 +987,7 @@ function run() {
       case 'serve': cmdServe(); break;
       case 'summary': cmdSummary(); break;
       case 'pending': cmdPending(); break;
+      case 'commit': cmdCommit(); break;
       case 'hash': cmdHash(); break;
       case 'doctor': cmdDoctor(); break;
       default:

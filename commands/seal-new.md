@@ -33,11 +33,10 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
    seal start   DOC --mcp <connected-mcps>          # opens the LIVE review (background task)
    ```
    Give the `http://127.0.0.1:…` URL. **In a git repo, COMMIT it** (don't just
-   remind): `git add DOC DOC.seal.md DOC.seal.summary.json` (whichever exist) +
-   `git commit -m "seal: review <doc>"`, then **offer to push** — that's what makes
-   the review shareable. Never commit the gitignored derived/secret files
-   (`*.review.html`, `*.seal.notify.json`, `*.seal.requests.jsonl`). If `DOC` isn't
-   in a git repo, say it's **local-only / not shareable** and offer `git init`.
-   Re-commit after each batch of comments/approvals so collaborators get the latest.
+   remind): **`seal commit DOC --push`** — one call stages the doc + review file +
+   summaries, commits, and pushes (gitignored derived/secret files are never
+   touched). If `DOC` isn't in a git repo, say it's **local-only / not shareable**
+   and offer `git init`. Re-run `seal commit DOC --push` after each batch of
+   comments/approvals so collaborators get the latest.
 
 Full detail: `commands/sealmd.md`.

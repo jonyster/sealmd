@@ -72,19 +72,17 @@ and offer `/seal new DOC`.)
    seal summary --in DOC --role "<their role>" --file <tmp.json>   # generate their tailored view
    seal start  DOC --mcp <connected-mcps>                          # opens the LIVE review (background)
    ```
-   **In a git repo, COMMIT the review so it's shareable — don't just remind.**
-   Run `git add DOC DOC.seal.md` (also `DOC.seal.summary.json` if present) and
-   `git commit -m "seal: review <doc>"`, then **offer to push**. The derived/secret
-   files (`*.review.html`, `*.seal.notify.json`, `*.seal.requests.jsonl`) are
-   gitignored — never commit them. If `DOC` isn't in a git repo, say the review is
-   **local-only / not shareable** and offer to `git init` first.
+   **In a git repo, COMMIT the review so it's shareable — don't just remind.** Run
+   **`seal commit DOC --push`** (one call: stages the doc + review file +
+   summaries, commits, pushes; never touches the gitignored derived/secret files).
+   If `DOC` isn't in a git repo, say the review is **local-only / not shareable**
+   and offer to `git init` first.
 
 ## While people review
 
-Whenever there's a new batch of comments/approvals (or the user says they're
-done), **commit again** — `git add DOC.seal.md DOC.seal.summary.json && git commit
--m "seal: …"` and offer to push. Each commit is what collaborators pull to see the
-latest review.
+After a new batch of comments/approvals (or when the user's done), **commit
+again** with **`seal commit DOC --push`**. Each commit is what collaborators pull
+to see the latest review.
 
 ## While it's open
 

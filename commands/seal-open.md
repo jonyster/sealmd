@@ -26,7 +26,6 @@ Call the chosen doc `DOC`.
   `/seal-role`** button.
 - If `<DOC>.seal.md` doesn't exist yet, say there's no review to open and offer
   **`/seal-new DOC`**.
-- In a git repo, after a batch of comments/approvals (or when they're done),
-  **commit** `DOC.seal.md` (+ `DOC.seal.summary.json`) and offer to push — that's
-  how others see the latest review. Never commit `*.review.html` /
-  `*.seal.notify.json` / `*.seal.requests.jsonl` (gitignored).
+- In a git repo, after a batch of comments/approvals (or when they're done), run
+  **`seal commit DOC --push`** (stages doc + review file + summaries, commits,
+  pushes) — that's how others see the latest review.
