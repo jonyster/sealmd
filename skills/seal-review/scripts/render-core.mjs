@@ -1,5 +1,5 @@
 // ============================================================================
-// seal-local — render core. Markdown -> self-contained, zero-network HTML.
+// sealmd — render core. Markdown -> self-contained, zero-network HTML.
 //
 // High-fidelity visual + behavioral port of the production sealmd.net review
 // page (packages/core/review-page.mjs). Calm paper, single Mercury-indigo
@@ -17,7 +17,7 @@
 //     + client-side wrapFirst() + Google-Docs alignCards() in Full doc
 //   - SERVE mode role generation: skeleton -> POST/poll /api/summary
 //
-// seal-local extras production lacks (kept, restyled native):
+// sealmd extras production lacks (kept, restyled native):
 //   - select-text -> Comment composer (.selcompose) + serve POST /api/comment
 //     vs static "copy for agent" fallback
 //   - view/scroll/role persistence across the post-save location.reload()
@@ -1121,7 +1121,7 @@ window.addEventListener('load',function(){highlightAnchors();alignCards();});
 setTimeout(function(){highlightAnchors();alignCards();},300);
 setTimeout(alignCards,800);
 
-// ---- selection composer (seal-local extra) ----
+// ---- selection composer (sealmd extra) ----
 const selbtn=document.getElementById('selbtn'),sc=document.getElementById('selCompose'),
   scQuote=document.getElementById('scQuote'),scInput=document.getElementById('scInput'),
   scSuggest=document.getElementById('scSuggest'),scOut=document.getElementById('scOut'),

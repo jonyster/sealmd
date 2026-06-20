@@ -1,4 +1,4 @@
-# seal-local — GitHub Copilot instructions
+# sealmd — GitHub Copilot instructions
 
 This repo is a **fully-local document review tool** (one zero-dependency Node
 CLI). The canonical, tool-agnostic guide is `AGENTS.md` at the repo root — follow

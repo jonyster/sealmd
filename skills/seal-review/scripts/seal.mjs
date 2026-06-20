@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================================
-// seal-local — fully local, file-based document review engine (v1: REVIEW).
+// sealmd — fully local, file-based document review engine (v1: REVIEW).
 //
 // TWO committed files living side by side:
 //   doc.md         the canonical document the agent reads & writes

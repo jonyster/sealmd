@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# seal-local notification hook (optional). Copy to .git/hooks/post-merge and
+# sealmd notification hook (optional). Copy to .git/hooks/post-merge and
 # chmod +x. After `git pull`/merge, if any *.seal.md sidecar changed, print its
 # review status so the owner sees new comments / approval changes immediately.
 #

@@ -1,5 +1,5 @@
 // ============================================================================
-// seal-local — notifications. Tag people (@mention) and tell them + the doc
+// sealmd — notifications. Tag people (@mention) and tell them + the doc
 // owner about activity via Slack / Teams / email. Zero dependencies (global
 // fetch, Node >=18). Every channel is OPT-IN via flag or env — nothing leaves
 // the machine unless you configure a webhook/key.

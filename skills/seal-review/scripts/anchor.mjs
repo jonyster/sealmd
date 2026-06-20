@@ -1,5 +1,5 @@
 // ============================================================================
-// seal-local — vendored normalization + content hash.
+// sealmd — vendored normalization + content hash.
 // DO NOT EDIT. Parity-frozen copy of packages/anchor/index.js (normalize +
 // hash region) and skill/seal/scripts/render.mjs `normalizeMarkdownV1`.
 // normalization_version = 1. The content_hash binds to THIS exact output, and

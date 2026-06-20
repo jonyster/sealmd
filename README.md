@@ -1,10 +1,10 @@
-# seal-local
+# sealmd
 
 Fully-local, file-based document review for Claude Code. Review a PRD / spec /
 RFC where the state lives in **two committed files** beside each other and the
 agent (your AI console) drives — no server, no network, no account.
 
-> seal-local makes review **version-aware and human-reviewable offline**. It is
+> sealmd makes review **version-aware and human-reviewable offline**. It is
 > tamper-**evident** (you can see the doc changed after a comment was filed),
 > not tamper-**proof**. For identity-verified approvals and a non-repudiable
 > audit trail, that is what hosted `seal publish` is for.
@@ -40,8 +40,8 @@ Any agent runs `node skills/seal-review/scripts/seal.mjs <command> --in doc.md`.
 ## Install
 
 ```
-/plugin marketplace add jonyster/seal-local
-/plugin install seal-local@seal-local
+/plugin marketplace add jonyster/sealmd
+/plugin install sealmd@sealmd
 ```
 
 Or run the engine directly (Node ≥18, zero dependencies):

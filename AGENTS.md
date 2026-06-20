@@ -1,6 +1,6 @@
-# AGENTS.md — driving seal-local from any AI coding agent
+# AGENTS.md — driving sealmd from any AI coding agent
 
-`seal-local` is a **fully-local document review tool**. The whole thing is one
+`sealmd` is a **fully-local document review tool**. The whole thing is one
 zero-dependency Node CLI, so it works the same from **Claude Code, Cursor, OpenAI
 Codex, GitHub Copilot**, or any agent that can run a shell command. This file is
 the canonical, tool-agnostic guide; the per-tool files (`.cursor/rules/…`,

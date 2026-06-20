@@ -1,10 +1,10 @@
 ---
-description: seal-local — fully-local document review (doc.md + doc.seal.md). Use when reviewing/commenting/approving a Markdown PRD/spec/RFC, accepting suggestions, or running a live review.
+description: sealmd — fully-local document review (doc.md + doc.seal.md). Use when reviewing/commenting/approving a Markdown PRD/spec/RFC, accepting suggestions, or running a live review.
 globs:
 alwaysApply: false
 ---
 
-# seal-local (Cursor)
+# sealmd (Cursor)
 
 A zero-dependency Node CLI for local document review. Full guide: see `AGENTS.md`
 at the repo root — follow it. Quick reference:
