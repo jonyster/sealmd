@@ -1,3 +1,6 @@
-# sealmd: the review page is a derived view, regenerated on every change.
-# The committed source of truth is doc.md + doc.seal.md.
-*.review.html
+# sealmd — derived & secret files. The committed source of truth is
+# doc.md + doc.seal.md (+ doc.seal.summary.json). Everything below is generated
+# or holds secrets and must NOT be committed:
+*.review.html          # derived review page (regenerated)
+*.seal.notify.json     # webhook URLs / notification secrets
+*.seal.requests.jsonl  # role-request queue (derived)
