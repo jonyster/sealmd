@@ -2,9 +2,18 @@
 description: Open an EXISTING local document review — no setup questions, just opens the live page.
 ---
 
-Open the existing review for the `.md` in `$ARGUMENTS` (or the doc the user means
-— most recently edited `.md`, or ask). Engine:
+Open the existing review for a doc. Engine:
 `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (call it `seal`).
+
+**Pick the doc — ALWAYS show an options menu (`AskUserQuestion`); never just
+yes/no-confirm one guess.** If `$ARGUMENTS` has a `.md` path or git URL, use it;
+otherwise present:
+- **Docs that already have a review** — glob for `*.seal.md` and list the matching
+  `.md` docs (these are the openable ones).
+- **"Git link / URL"** — paste a repo URL; `git clone` it and open the review
+  inside the clone.
+- **"Other"** → type/browse a path.
+Call the chosen doc `DOC`.
 
 - Run **`seal start DOC`** as a **background task** and give the user the
   `http://127.0.0.1:…` URL. No questions. **Open the LIVE server — never a static

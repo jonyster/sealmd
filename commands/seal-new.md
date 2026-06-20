@@ -9,12 +9,14 @@ Be conversational — one question at a time, sensible defaults.
 static `*.review.html`.** This is the sealmd plugin, NOT the hosted "seal" skill;
 ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
 
-1. **Pick the doc** — offer **both** sources:
-   - **Local file (browse)** — list the project's `.md` files (glob `**/*.md`) for
-     them to pick, plus "Other → type/browse a path".
-   - **Git link** — they can paste a **git repo URL** or a link to a `.md`. For a
-     repo/remote, `git clone <url>` locally and review the doc *inside the clone*
-     (so the sidecar commits back = shareable); a bare raw-file URL is local-only.
+1. **Pick the doc — ALWAYS show an options menu (`AskUserQuestion`); never just
+   yes/no-confirm one guess.** If `$ARGUMENTS` has a `.md` path or git URL, use it;
+   otherwise glob `**/*.md` and present:
+   - **Top local `.md` candidates** — labelled by name + path, to pick/browse.
+   - **"Git link / URL"** — paste a repo URL or `.md` link; for a repo/remote
+     `git clone <url>` locally and review *inside the clone* (sidecar commits back
+     = shareable); a bare raw-file URL is **local-only**.
+   - **"Other"** → type/browse a path.
    Call the chosen path `DOC`. If `<DOC>.seal.md` already exists, ask before
    overwriting (`init --force`).
 2. **Owner** — default `git config user.name`; confirm, or ask who owns sign-off if git has none.

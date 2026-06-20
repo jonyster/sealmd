@@ -28,17 +28,18 @@ ENGINE (use ONLY this — the sealmd plugin's CLI):
 - **`open`** → open an existing review, no questions.
 - *(no sub-command)* → **auto-detect:** existing sidecar → `open`; else → `new`.
 
-**Pick the doc** — if `$ARGUMENTS` has a `.md` path or a git/URL, use it.
-Otherwise help them choose, and **offer both sources**:
-- **Local file (browse)** — list the project's `.md` files (glob `**/*.md`) and let
-  them pick, with an "Other → type/browse a path" option (AskUserQuestion).
-- **Git link** — they can paste a **git repo URL** or a link to a `.md`. For a repo
-  or remote, **`git clone <url>` locally first** and review the doc *inside the
-  clone* — so the review sidecar can be committed and pushed back (shareable). For
-  a bare raw-file URL with no repo, fetch it but warn it's **local-only** (the
-  sidecar can't be committed back).
+**Pick the doc — ALWAYS show an options menu (`AskUserQuestion`); never just
+yes/no-confirm a single guessed doc.** (This applies to `/sealmd`, `/seal-new`,
+and `/seal-open` alike.) If `$ARGUMENTS` already has a `.md` path or a git URL,
+use it directly; otherwise glob the project's `.md` files and ask, with options:
+- **Top local `.md` candidates** — a few, labelled by name + path, to pick/browse.
+- **"Git link / URL"** — paste a git repo URL or a link to a `.md`. For a
+  repo/remote, **`git clone <url>` locally first** and review the doc *inside the
+  clone* (so the sidecar commits + pushes back = shareable); a bare raw-file URL is
+  fetched but **local-only** (can't commit the sidecar back).
+- **"Other"** → type/browse a path.
 
-Call the chosen local path `DOC`. Existing = `<DOC>.seal.md` exists
+Only after they pick, call it `DOC`. Existing = `<DOC>.seal.md` exists
 (`seal status --in DOC --json` succeeds).
 
 ## `open` — open an existing review
