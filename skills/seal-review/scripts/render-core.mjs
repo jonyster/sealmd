@@ -1170,7 +1170,7 @@ scPost.onclick=async()=>{
     const scEmail=document.getElementById('scEmail');
     const payload={author:cAuthor||'me',body:scInput.value.trim(),anchor:curQuote||null,suggestion:curMode==='suggest'?scSuggest.value.trim():undefined,email:(scEmail&&scEmail.value.trim())||undefined};
     try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const j=await res.json();
-      if(j.ok){toast('Saved to sidecar');sc.hidden=true;scInput.value='';scSuggest.value='';
+      if(j.ok){toast('Comment saved');sc.hidden=true;scInput.value='';scSuggest.value='';
         try{sessionStorage.setItem('seal-scroll',window.scrollY)}catch(e){}setTimeout(()=>location.reload(),650);}
       else toast('Error: '+(j.error||'unknown'));}
     catch(e){toast('Server error: '+e.message);}
@@ -1195,7 +1195,7 @@ if(cmtPost){
     if(isServe){
       const cmtEmail=document.getElementById('cmtEmail');
       try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({author:who,body:bodyTxt,anchor:null,email:(cmtEmail&&cmtEmail.value.trim())||undefined})});const j=await res.json();
-        if(j.ok){toast('Saved to sidecar');cmtInput.value='';try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>location.reload(),650);}
+        if(j.ok){toast('Comment saved');cmtInput.value='';try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>location.reload(),650);}
         else toast('Error: '+(j.error||'unknown'));}
       catch(e){toast('Server error: '+e.message);}
       return;

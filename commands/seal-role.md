@@ -2,6 +2,8 @@
 description: Add a role-tailored summary to a seal review (generate a summary written for a specific reviewer role).
 ---
 
+**Plain language:** call `<doc>.seal.md` **"the review file"** to the user — never say "sidecar" (jargon).
+
 The user wants a **role-tailored summary** added to a seal review. `$ARGUMENTS`
 may contain the role and/or the doc path.
 

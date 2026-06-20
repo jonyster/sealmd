@@ -2,6 +2,8 @@
 description: Set up a NEW local document review — guided: confirm doc → owner → your role → sharing (install MCP if needed) → open it.
 ---
 
+**Plain language:** call `<doc>.seal.md` **"the review file"** to the user — never say "sidecar" (jargon).
+
 Run the **new-doc** sealmd flow on the `.md` in `$ARGUMENTS` (or ask which doc).
 Engine (use ONLY this): `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (call it `seal`).
 Be conversational — one question at a time, sensible defaults.

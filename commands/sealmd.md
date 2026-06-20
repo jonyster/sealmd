@@ -6,6 +6,10 @@ You are running the **sealmd** review flow. `$ARGUMENTS` may contain a doc path.
 Be conversational — ask one question at a time, use sensible defaults, never dump
 the whole list at once.
 
+**Plain language:** to the user, call `<doc>.seal.md` **"the review file"** (it
+holds the comments + sign-offs, lives next to the doc, commit it). Never say
+"sidecar" — it's jargon. Same for other internal terms below.
+
 ENGINE (use ONLY this — the sealmd plugin's CLI):
 `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (fallback: the
 `scripts/` dir next to this command's skill). Call it `seal` below.
@@ -35,8 +39,8 @@ use it directly; otherwise glob the project's `.md` files and ask, with options:
 - **Top local `.md` candidates** — a few, labelled by name + path, to pick/browse.
 - **"Git link / URL"** — paste a git repo URL or a link to a `.md`. For a
   repo/remote, **`git clone <url>` locally first** and review the doc *inside the
-  clone* (so the sidecar commits + pushes back = shareable); a bare raw-file URL is
-  fetched but **local-only** (can't commit the sidecar back).
+  clone* (so the review file commits + pushes back = shareable); a bare raw-file URL is
+  fetched but **local-only** (can't commit the review file back).
 - **"Other"** → type/browse a path.
 
 Only after they pick, call it `DOC`. Existing = `<DOC>.seal.md` exists
@@ -57,7 +61,7 @@ and offer `/seal new DOC`.)
    PM, Legal, a job title — anything). You'll generate that role's summary so
    their view is tailored from the first open.
 4. **Sharing** — **ask how they want to share / be notified:**
-   - **Git only** (commit the sidecar — the simple default) · **Slack** · **Teams**
+   - **Git only** (commit the review file — the simple default) · **Slack** · **Teams**
      · **Email** · **none**.
    - If they pick Slack/Teams/Email and that **MCP isn't connected**, tell them to
      install it (e.g. the Slack MCP) and which `--mcp` you'll pass; if they can't,
@@ -69,7 +73,7 @@ and offer `/seal new DOC`.)
    seal start  DOC --mcp <connected-mcps>                          # opens the LIVE review (background)
    ```
    Then **remind them to commit `DOC` + `<DOC>.seal.md`** so collaborators can
-   view the review (the sidecar is the shareable artifact; `*.review.html` is
+   view the review (the review file is the shareable artifact; `*.review.html` is
    gitignored). If `DOC` isn't in a git repo, say the review is **local-only / not
    shareable** and offer to `git init`.
 

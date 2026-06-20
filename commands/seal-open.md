@@ -2,6 +2,8 @@
 description: Open an EXISTING local document review — no setup questions, just opens the live page.
 ---
 
+**Plain language:** call `<doc>.seal.md` **"the review file"** to the user — never say "sidecar" (jargon).
+
 Open the existing review for a doc. Engine:
 `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (call it `seal`).
 
