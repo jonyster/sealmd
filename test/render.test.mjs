@@ -283,6 +283,25 @@ test('deriveSummary on huge doc does not throw', () => {
 // ---------------------------------------------------------------------------
 // renderReviewPage — smoke + security
 // ---------------------------------------------------------------------------
+test('renderReviewPage renders summary entries given as bare strings (not just objects)', () => {
+  // older/other agent output stores key_decisions / relevant_sections as plain
+  // strings. The renderer must show them, not drop them into empty rows.
+  const html = renderReviewPage(minimalOpts({
+    roles: [{
+      role: 'PM',
+      lead: 'The PM lead.',
+      key_decisions: ['Speed never bypasses screening.', 'Ship corridor A first.'],
+      relevant_sections: ['§2 Goals — P95 under 30s and full coverage'],
+      needs_attention: ['All open questions in §11 are unresolved.'],
+    }],
+  }));
+  assert.ok(html.includes('<h3>Key decisions</h3>'), 'Key decisions header present for string entries');
+  assert.ok(html.includes('Speed never bypasses screening.'), 'string key_decision content rendered');
+  assert.ok(html.includes('<h3>What this means for you</h3>'), 'relevant_sections header present');
+  assert.ok(html.includes('§2 Goals'), 'string relevant_section content rendered');
+  assert.ok(html.includes('nolabel'), 'label-less key decision uses the full-width row');
+});
+
 function minimalOpts(overrides = {}) {
   return {
     title: 'My Spec',

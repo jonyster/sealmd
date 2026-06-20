@@ -231,14 +231,31 @@ const ICONS = {
 // AFTER the .lenspills (lead / key decisions / what-this-means / your-call).
 function summaryReadyInner(summary, wordCount) {
   const lead = String(summary.role_lead || summary.lead || '');
-  // drop blank entries so a partial summary never renders an empty header / row
-  const kds = (summary.key_decisions || []).filter((k) => k && (String(k.label || '').trim() || String(k.value || '').trim()));
-  const secs = (summary.relevant_sections || []).filter((s) => s && (String(s.section || '').trim() || String(s.detail || '').trim()));
-  const judg = (summary.needs_your_judgment || summary.needs_attention || []).filter((n) => String(n || '').trim());
-  const keys = kds
-    .map((k) => `<li><span class="kk">${escapeHtml(k.label || '')}</span><span class="vv">${renderInline(String(k.value || ''))}</span></li>`).join('\n');
-  const rsecs = secs
-    .map((s) => `<div class="rsec"><div class="rsh">${escapeHtml(s.section || '')}</div><div class="rsd">${renderInline(String(s.detail || ''))}</div></div>`).join('\n');
+  // Tolerate BOTH shapes: objects ({label,value} / {section,detail}) AND bare
+  // strings (older/other agent output). A string key_decision has no label, so we
+  // render it full-width instead of an empty label cell. Then drop truly-blank
+  // entries so a partial summary never shows an empty header / row.
+  const kds = (summary.key_decisions || [])
+    .map((k) => (typeof k === 'string' ? { label: '', value: k } : (k || {})))
+    .filter((k) => String(k.label || '').trim() || String(k.value || '').trim());
+  const secs = (summary.relevant_sections || [])
+    .map((s) => (typeof s === 'string' ? { section: '', detail: s } : (s || {})))
+    .filter((s) => String(s.section || '').trim() || String(s.detail || '').trim());
+  const judg = (summary.needs_your_judgment || summary.needs_attention || [])
+    .map((n) => (typeof n === 'string' ? n : (n && (n.value || n.detail || n.text)) || ''))
+    .filter((n) => String(n || '').trim());
+  const keys = kds.map((k) => {
+    const lab = String(k.label || '').trim();
+    const val = renderInline(String(k.value || ''));
+    return lab ? `<li><span class="kk">${escapeHtml(lab)}</span><span class="vv">${val}</span></li>`
+      : `<li class="nolabel"><span class="vv">${val}</span></li>`;
+  }).join('\n');
+  const rsecs = secs.map((s) => {
+    const sec = String(s.section || '').trim();
+    const det = renderInline(String(s.detail || ''));
+    return sec ? `<div class="rsec"><div class="rsh">${escapeHtml(sec)}</div><div class="rsd">${det}</div></div>`
+      : `<div class="rsec"><div class="rsd">${det}</div></div>`;
+  }).join('\n');
   const judges = judg
     .map((n) => `<div class="judge"><span class="ji"></span><span>${renderInline(String(n))}</span></div>`).join('\n');
   return `<p class="lead">${renderInline(lead)}</p>
@@ -547,6 +564,7 @@ export function renderReviewPage({
   .summary ul.keys{list-style:none;padding:0;margin:8px 0 0}
   .summary ul.keys li{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
   .summary ul.keys li .kk{color:var(--muted);min-width:152px;font-size:13px;padding-top:2px}
+  .summary ul.keys li.nolabel .vv{flex:1}
   .summary ul.keys li .vv{color:var(--ink)}
   .summary ul.keys li .vv b,.summary ul.keys li .vv strong{color:var(--ink);font-weight:600}
   .summary .judge{background:var(--panel);border:0;border-left:2px solid var(--sev-high);border-radius:var(--r-sm);padding:12px 14px;margin-top:14px;color:var(--ink-soft);font-size:14px;line-height:1.55;display:flex;gap:10px;align-items:flex-start}
