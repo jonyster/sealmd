@@ -59,7 +59,7 @@ spec.review.html   a self-contained review page     ← generated, gitignored
 In **Claude Code** (or Cursor / Codex / Copilot), just say:
 
 ```
-/sealmd spec.md
+/seal spec.md
 ```
 
 `/seal` is the only command most people need. **New doc** → it asks the owner,

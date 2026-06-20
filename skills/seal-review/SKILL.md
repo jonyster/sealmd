@@ -52,12 +52,11 @@ use the `scripts/` dir next to this SKILL.md.
 
 ## ⭐ `/seal` — the one command for everyone
 
-Most users need exactly one command: **`/seal`** (see `commands/seal.md`):
-- **`/seal new <doc>`** → ask owner (default from git) → ask "what's your role"
-  (generate that summary) → ask how to share (git / Slack / Teams / Email, install
-  the MCP if needed) → open the live review.
-- **`/seal open <doc>`** → just open an existing review, no questions.
-- **`/seal <doc>`** (no sub-command) → auto-detect: existing → open, else → new.
+Most users need one command (see `commands/sealmd.md`):
+- **`/sealmd <doc>`** → auto-detect: existing review → open it; new doc → guided
+  setup (owner → "what's your role" → sharing → open the live review).
+- **`/seal-new <doc>`** → force the guided new-doc setup.
+- **`/seal-open <doc>`** → just open an existing review, no questions.
 
 Power users can use the specific commands below (`/seal-review`, `/seal-role`) and
 the raw CLI. Everything `/seal` does is just these commands underneath.
