@@ -56,19 +56,26 @@ spec.review.html   a self-contained review page     ← generated, gitignored
 
 ## Quick start
 
-```bash
-git clone https://github.com/jonyster/sealmd
-cd your-project
-ENG="node /path/to/sealmd/skills/seal-review/scripts/seal.mjs"
+In **Claude Code** (or Cursor / Codex / Copilot), just say:
 
-$ENG init    --in spec.md                       # create the sidecar
-$ENG comment --in spec.md --author you --body "tighten scope" --anchor "exact span from the doc"
-$ENG submit  --in spec.md                        # put it up for sign-off
-$ENG approve --in spec.md --approver lead --note "LGTM"
-$ENG serve   --in spec.md --open                 # live, interactive review
+```
+/seal spec.md
 ```
 
-Open the page → pick your **role** for a tailored summary → select text to **Comment / Suggest** → **Accept** a suggestion (it rewrites `spec.md`) → **Approve**.
+`/seal` is the only command most people need. **New doc** → it asks the owner,
+your role, and how to share (Slack/Teams/Email via MCP, or git), then opens the
+live review. **Existing doc** → it just opens it.
+
+Power users — drive the CLI directly:
+
+```bash
+ENG="node /path/to/sealmd/skills/seal-review/scripts/seal.mjs"
+$ENG start   spec.md                             # init-if-needed + open live review
+$ENG comment --in spec.md --body "tighten scope" --anchor "exact span" --mention alice
+$ENG submit  --in spec.md && $ENG approve --in spec.md --approver lead --note "LGTM"
+```
+
+In the page → pick your **role** for a tailored summary → select text to **Comment / Suggest** → **Accept** a suggestion (it rewrites `spec.md`) → **Approve**.
 
 ---
 

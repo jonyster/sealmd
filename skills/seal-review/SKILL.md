@@ -50,7 +50,19 @@ node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs" <command> --in 
 If `${CLAUDE_PLUGIN_ROOT}` is unset (e.g. running from a clone, not an install),
 use the `scripts/` dir next to this SKILL.md.
 
-## The one simple command
+## ⭐ `/seal` — the one command for everyone
+
+Most users need exactly one command: **`/seal [doc.md]`**. It's a guided flow (see
+`commands/seal.md`):
+- **New doc** → ask owner (default from git) → ask "what's your role" (generate that
+  summary) → ask how to share (git / Slack / Teams / Email, install the MCP if
+  needed) → open the live review.
+- **Existing doc** → just open it for review, no questions.
+
+Power users can use the specific commands below (`/seal-review`, `/seal-role`) and
+the raw CLI. Everything `/seal` does is just these commands underneath.
+
+## The `start` command (what `/seal` opens with)
 
 When the user just wants to review a doc, run **`start`** with the path — it
 creates the sidecar if needed (owner from git), then opens the **live** review:
