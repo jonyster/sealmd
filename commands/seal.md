@@ -17,8 +17,17 @@ ENGINE: `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"`
 - **`open`** → open an existing review, no questions.
 - *(no sub-command)* → **auto-detect:** existing sidecar → `open`; else → `new`.
 
-The `.md` path is the rest of `$ARGUMENTS`, or the doc the user means (most
-recently edited `.md`, or ask). Call it `DOC`. Existing = `<DOC>.seal.md` exists
+**Pick the doc** — if `$ARGUMENTS` has a `.md` path or a git/URL, use it.
+Otherwise help them choose, and **offer both sources**:
+- **Local file (browse)** — list the project's `.md` files (glob `**/*.md`) and let
+  them pick, with an "Other → type/browse a path" option (AskUserQuestion).
+- **Git link** — they can paste a **git repo URL** or a link to a `.md`. For a repo
+  or remote, **`git clone <url>` locally first** and review the doc *inside the
+  clone* — so the review sidecar can be committed and pushed back (shareable). For
+  a bare raw-file URL with no repo, fetch it but warn it's **local-only** (the
+  sidecar can't be committed back).
+
+Call the chosen local path `DOC`. Existing = `<DOC>.seal.md` exists
 (`seal status --in DOC --json` succeeds).
 
 ## `open` — open an existing review

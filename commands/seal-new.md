@@ -6,7 +6,13 @@ Run the **new-doc** seal flow on the `.md` in `$ARGUMENTS` (or ask which doc).
 Engine: `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (call it `seal`).
 Be conversational — one question at a time, sensible defaults.
 
-1. **Confirm the doc** (`DOC`). If `<DOC>.seal.md` already exists, ask before
+1. **Pick the doc** — offer **both** sources:
+   - **Local file (browse)** — list the project's `.md` files (glob `**/*.md`) for
+     them to pick, plus "Other → type/browse a path".
+   - **Git link** — they can paste a **git repo URL** or a link to a `.md`. For a
+     repo/remote, `git clone <url>` locally and review the doc *inside the clone*
+     (so the sidecar commits back = shareable); a bare raw-file URL is local-only.
+   Call the chosen path `DOC`. If `<DOC>.seal.md` already exists, ask before
    overwriting (`init --force`).
 2. **Owner** — default `git config user.name`; confirm, or ask who owns sign-off if git has none.
 3. **Your role** — ask "What's your role for this review?"; you'll generate that role's tailored summary.
