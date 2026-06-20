@@ -433,7 +433,7 @@ function buildPage(doc, r, { mode = 'static' } = {}) {
   const mcp = (arg('mcp') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   const git = (mode === 'serve') ? gitInfo(dirname(doc)) : { inRepo: false, remote: null };
   return renderReviewPage({
-    title: r.document.title, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
+    title: r.document.title, owner: r.document.owner || null, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
     people, mcp, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
     canPR: git.inRepo && !!git.remote && ghReady(),

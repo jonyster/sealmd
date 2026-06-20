@@ -336,7 +336,7 @@ function approvalsPanel(review) {
 const SEAL_SVG = `<svg viewBox="0 0 80 64" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 6 C41.74 6, 42.87 13.56, 45.21 14.25 C47.55 14.94, 52.6 9.19, 54.06 10.13 C55.52 11.07, 52.38 18.04, 53.98 19.89 C55.58 21.73, 62.93 19.62, 63.65 21.2 C64.37 22.78, 57.96 26.95, 58.31 29.37 C58.66 31.78, 65.98 33.98, 65.74 35.7 C65.49 37.42, 57.84 37.46, 56.83 39.69 C55.81 41.91, 60.79 47.71, 59.65 49.03 C58.51 50.34, 52.06 46.24, 50 47.56 C47.95 48.88, 48.99 56.46, 47.33 56.95 C45.66 57.44, 42.44 50.5, 40 50.5 C37.56 50.5, 34.34 57.44, 32.67 56.95 C31.01 56.46, 32.05 48.88, 30 47.56 C27.94 46.24, 21.49 50.34, 20.35 49.03 C19.21 47.71, 24.19 41.91, 23.17 39.69 C22.16 37.46, 14.51 37.42, 14.26 35.7 C14.02 33.98, 21.34 31.78, 21.69 29.37 C22.04 26.95, 15.63 22.78, 16.35 21.2 C17.07 19.62, 24.42 21.73, 26.02 19.89 C27.62 18.04, 24.48 11.07, 25.94 10.13 C27.4 9.19, 32.45 14.94, 34.79 14.25 C37.13 13.56, 38.26 6, 40 6 Z"/><circle cx="40" cy="32" r="13"/><path d="M33.5 32.5 L38 37 L47.5 26"/></svg>`;
 
 export function renderReviewPage({
-  title, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
+  title, owner = null, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
   curatedRoles = [], reviewerRole = '', people = [], mcp = [],
   canCommit = false, gitRemote = null, autoCommit = false, dirty = false, canPR = false,
   mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static',
@@ -417,7 +417,7 @@ export function renderReviewPage({
 
   // ---- client data ----------------------------------------------------------
   const SEAL_JS_DATA = JSON.stringify({
-    summaries: roleMap, labels: roleLabels, defaultSlug, title: title || srcName,
+    summaries: roleMap, labels: roleLabels, defaultSlug, title: title || srcName, owner: owner || null,
     docPath, enginePath, srcName, mode, wordCount,
     people: Array.isArray(people) ? people : [],
     mcp: Array.isArray(mcp) ? mcp : [],
@@ -1272,8 +1272,10 @@ function renderShare(){
     const fhtml=fmd.replace(/\\.md$/,'.review.html');
     const fseal=fmd.replace(/\\.md$/,'.seal.md');
     const zipName=fmd.replace(/\\.md$/,'.review-bundle.zip');
-    combined='Hi,\\n\\nI\\'d really value your review of "'+T+'".\\n\\nWhat to do: open '+fhtml+' — it\\'s a self-contained page that opens offline, no install needed. Add your comments right in the page; they save into '+fseal+' and come straight back to me.\\n\\nHere are the files (all in '+zipName+'):\\n• '+fhtml+' — the review page — open this one\\n• '+fseal+' — your comments + review state\\n• '+fmd+' — the source document\\n\\nThanks so much!';
-    html+='<div class="opt"><b>📤 Send to reviewers</b><p>Download the bundle, then copy the note and send it your way.</p>'+
+    const hi='Hi'+(SEAL.owner?' '+SEAL.owner:'')+',';
+    combined=hi+'\\n\\nI\\'ve reviewed "'+T+'" — my comments are in the files below.\\n\\nOpen '+fhtml+' to see them — it\\'s a self-contained page that opens offline, no install. My comments and the review state live in '+fseal+', right next to the doc.\\n\\nHere are the files (all in '+zipName+'):\\n• '+fhtml+' — the review page with my comments\\n• '+fseal+' — the comments + review state\\n• '+fmd+' — the source document\\n\\nThanks!';
+    const ownerLabel=SEAL.owner?escapeText(SEAL.owner):'the owner';
+    html+='<div class="opt"><b>📤 Send your review back</b><p>Download the bundle (your comments included), then copy the note and send both to '+ownerLabel+'.</p>'+
       '<div class="sharebtns">'+
         '<button class="btn primary tiny" id="bundleGo">⬇ Download bundle (.zip)</button>'+
         '<button class="btn ghost tiny" id="copyMsg">Copy message</button></div></div>';
