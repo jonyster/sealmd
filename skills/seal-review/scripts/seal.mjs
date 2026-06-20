@@ -436,6 +436,7 @@ function buildPage(doc, r, { mode = 'static' } = {}) {
     title: r.document.title, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
     people, mcp, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
+    canPR: git.inRepo && !!git.remote && ghReady(),
     mdRaw: md, contentHash: ch, wordCount, comments, review, mode,
     renderedAt: 'rendered ' + nowISO(),
   });
@@ -741,6 +742,76 @@ function cmdCommit() {
   out({ ok: true, action: 'commit', ...r, push_error: r.pushError, note: r.committed ? null : 'nothing to commit (no changes since last commit)' });
 }
 
+// Resolve the gh binary. A background `serve` may inherit a thin PATH that omits
+// ~/.local/bin or Homebrew, so probe common locations, not just bare `gh`. Cached.
+let _ghBin;
+function ghBin() {
+  if (_ghBin !== undefined) return _ghBin;
+  const home = process.env.HOME || '';
+  const cands = ['gh', `${home}/.local/bin/gh`, '/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh'];
+  for (const c of cands) {
+    try { execFileSync(c, ['--version'], { stdio: ['ignore', 'ignore', 'ignore'] }); _ghBin = c; return c; }
+    catch { /* try next */ }
+  }
+  _ghBin = null; return null;
+}
+// gh CLI available + authenticated? Cached. Lets us offer "commit & open PR"
+// with no MCP server — the local gh login does the GitHub write.
+let _ghReady;
+function ghReady() {
+  if (_ghReady !== undefined) return _ghReady;
+  const bin = ghBin();
+  if (!bin) { _ghReady = false; return false; }
+  try { execFileSync(bin, ['auth', 'status'], { stdio: ['ignore', 'ignore', 'ignore'] }); _ghReady = true; }
+  catch { _ghReady = false; }
+  return _ghReady;
+}
+
+// Commit the review artifacts onto a feature branch, push, and open (or reuse) a
+// GitHub PR via `gh` — no MCP needed, the local gh login does the write. Core
+// (throws); used by the CLI `pr` command and the serve /api/pr endpoint.
+function corePR(doc, { title, body, branch } = {}) {
+  const git = gitInfo(dirname(doc));
+  if (!git.inRepo) throw new Error('not a git repo — run `git init` first');
+  if (!git.remote) throw new Error('no git remote — add one: git remote add origin <url>');
+  if (!ghReady()) throw new Error('GitHub CLI not ready — install `gh` and run `gh auth login`');
+  const G = (args) => execFileSync('git', args, { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const GHB = ghBin();
+  const GH = (args) => execFileSync(GHB, args, { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  // PR base = repo default branch (ask gh, fall back to origin/HEAD, then main)
+  let base = null;
+  try { base = GH(['repo', 'view', '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name']); } catch {}
+  if (!base) { try { base = G(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']).replace(/^origin\//, ''); } catch {} }
+  base = base || 'main';
+  const cur = (() => { try { return G(['rev-parse', '--abbrev-ref', 'HEAD']); } catch { return base; } })();
+  // on the base branch (or detached) → cut a feature branch so the PR has a diff
+  let head = cur;
+  if (cur === base || cur === 'HEAD') {
+    head = branch || `seal/review-${basename(doc).replace(/\.md$/i, '').replace(/[^a-zA-Z0-9._-]+/g, '-')}`;
+    try { G(['rev-parse', '--verify', head]); G(['checkout', head]); }   // exists → switch
+    catch { G(['checkout', '-b', head]); }                               // else create
+  }
+  // stage + commit the review files on this branch (no push — we push the branch)
+  const ttl = title || `Seal review: ${basename(doc).replace(/\.md$/i, '')}`;
+  const commit = coreCommit(doc, { message: `seal: ${ttl}`, push: false });
+  let pushed = false, pushError = null;
+  try { G(['push', '-u', 'origin', head]); pushed = true; } catch (e) { pushError = String(e.message || e).split('\n')[0]; }
+  // open the PR, or return the existing one for this branch
+  let url = null, created = false;
+  try { url = GH(['pr', 'view', head, '--json', 'url', '-q', '.url']); } catch {}
+  if (!url) {
+    url = GH(['pr', 'create', '--base', base, '--head', head, '--title', ttl,
+      '--body', body || `Seal review of \`${basename(doc)}\`.`]);
+    created = true;
+  }
+  return { url, head, base, created, committed: commit.committed, pushed, pushError, remote: git.remote };
+}
+function cmdPR() {
+  const doc = docPath();
+  const r = corePR(doc, { title: arg('title'), body: arg('body'), branch: arg('branch') });
+  out({ ok: true, action: 'pr', ...r, push_error: r.pushError });
+}
+
 // Role summaries the live page requested but that don't exist yet. The agent
 // drains this (generate each + `seal summary`) — works even if it missed the
 // live SEAL_EVENT (e.g. wasn't watching the background task at that instant).
@@ -850,6 +921,15 @@ function cmdServe() {
         const r = coreCommit(doc, { message: b.message, push: b.push !== false });
         emitEvent({ type: 'committed', committed: r.committed, pushed: r.pushed, doc });
         return J(res, 200, { ok: true, ...r, push_error: r.pushError });
+      }
+      // commit the review onto a branch + open a GitHub PR via `gh` (no MCP)
+      if (req.method === 'POST' && url.pathname === '/api/pr') {
+        const b = await readBody(req);
+        try {
+          const pr = corePR(doc, { title: b.title, body: b.body, branch: b.branch });
+          emitEvent({ type: 'pr_opened', url: pr.url, head: pr.head, base: pr.base, created: pr.created, doc });
+          return J(res, 200, { ok: true, ...pr, push_error: pr.pushError });
+        } catch (e) { return J(res, 200, { ok: false, error: String(e.message || e) }); }
       }
       // toggle auto-commit (commit+push after each comment/suggestion)
       if (req.method === 'POST' && url.pathname === '/api/autocommit') {
@@ -1058,6 +1138,7 @@ function run() {
       case 'summary': cmdSummary(); break;
       case 'pending': cmdPending(); break;
       case 'commit': cmdCommit(); break;
+      case 'pr': cmdPR(); break;
       case 'hash': cmdHash(); break;
       case 'doctor': cmdDoctor(); break;
       default:

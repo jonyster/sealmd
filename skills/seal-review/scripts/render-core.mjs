@@ -320,7 +320,7 @@ const SEAL_SVG = `<svg viewBox="0 0 80 64" fill="none" stroke="currentColor" str
 export function renderReviewPage({
   title, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
   curatedRoles = [], reviewerRole = '', people = [], mcp = [],
-  canCommit = false, gitRemote = null, autoCommit = false, dirty = false,
+  canCommit = false, gitRemote = null, autoCommit = false, dirty = false, canPR = false,
   mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static',
 }) {
   if (!roles.length) roles = [{ role: 'General', ...deriveSummary(mdRaw, wordCount) }];
@@ -404,7 +404,7 @@ export function renderReviewPage({
     people: Array.isArray(people) ? people : [],
     mcp: Array.isArray(mcp) ? mcp : [],
     taxonomy: taxonomy.map((t) => ({ slug: t.slug, label: t.label })),
-    canCommit, gitRemote, autoCommit, dirty,
+    canCommit, gitRemote, autoCommit, dirty, canPR,
   }).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html><html lang="en" data-theme="dark"><head>
@@ -1287,6 +1287,10 @@ function renderShare(){
   const b=document.getElementById('shareBody');
   const avail=Object.keys(CHAN).filter(k=>MCP.includes(k));
   let html='';
+  // GitHub PR via local gh CLI — no MCP needed. Top of the dialog when available.
+  if(isServe&&SEAL.canPR){
+    html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button></div></div>';
+  }
   if(isServe&&avail.length){
     html+='<div class="opt"><b>Share via</b><p>Pick one or more — sent through your connected integrations.</p>'+
       '<div class="sharechans" id="shareChans">'+avail.map(k=>'<label class="chanopt"><input type="checkbox" value="'+k+'"><span class="ci">'+CHAN[k].ic+'</span><span><b>'+CHAN[k].label+'</b><div class="mh" style="font-size:11px;color:var(--muted)">'+CHAN[k].sub+'</div></span></label>').join('')+'</div>'+
@@ -1300,6 +1304,16 @@ function renderShare(){
   if(!isServe)html+='<div class="opt"><b>🔗 Live + writable</b><p>Run <code>seal serve</code> for a local link where reviewers comment.</p></div>';
   html+='<div class="opt"><b>🌐 Shared link + verified identity</b><p>A hosted link reviewers open from anywhere with sign-in — the <code>seal publish</code> step.</p></div>';
   b.innerHTML=html;
+  const prGo=document.getElementById('prGo');
+  if(prGo)prGo.onclick=async()=>{
+    prGo.textContent='Opening PR…';prGo.disabled=true;
+    try{const j=await(await fetch('/api/pr',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json();
+      if(j.ok&&j.url){document.getElementById('prRow').innerHTML='<p>PR ready: <a href="'+j.url+'" target="_blank" rel="noopener">'+escapeText(j.url)+'</a>'+(j.push_error?' <span style="color:var(--muted)">(push warning: '+escapeText(j.push_error)+')</span>':'')+'</p><button class="btn ghost tiny" id="prCopy">Copy link</button>';
+        const pc=document.getElementById('prCopy');if(pc)pc.onclick=()=>navigator.clipboard.writeText(j.url).then(()=>toast('PR link copied'));
+        toast(j.created?'PR opened ✓':'PR updated ✓');}
+      else{toast('Error: '+(j.error||'PR failed'));prGo.textContent='Commit & open PR';prGo.disabled=false;}}
+    catch(e){toast('Error: '+e.message);prGo.textContent='Commit & open PR';prGo.disabled=false;}
+  };
   const chans=document.getElementById('shareChans');
   if(chans)chans.addEventListener('change',e=>{const l=e.target.closest('.chanopt');if(l)l.classList.toggle('on',e.target.checked);});
   const go=document.getElementById('shareGo');
