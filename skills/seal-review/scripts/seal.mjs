@@ -35,6 +35,7 @@ import { readFileSync, writeFileSync, existsSync, realpathSync, renameSync, appe
 import { pathToFileURL } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { randomBytes } from 'node:crypto';
 import { dirname, basename, relative } from 'node:path';
 import { normalizeMarkdown, contentHash } from './anchor.mjs';
 import { renderReviewPage, deriveSummary } from './render-core.mjs';
@@ -382,7 +383,7 @@ function approvalState(r, live) {
 }
 
 // ---- build the review page (HTML string) ----------------------------------
-function buildPage(doc, r, { mode = 'static' } = {}) {
+function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   const md = normalizeMarkdown(readDoc(doc));
   const ch = contentHash(md);
   const wordCount = (md.match(/\S+/g) || []).length;
@@ -437,7 +438,7 @@ function buildPage(doc, r, { mode = 'static' } = {}) {
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
     people, mcp, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
     canPR: git.inRepo && !!git.remote && ghReady(),
-    mdRaw: md, contentHash: ch, wordCount, comments, review, mode,
+    mdRaw: md, contentHash: ch, wordCount, comments, review, mode, token,
     renderedAt: 'rendered ' + nowISO(),
   });
 }
@@ -1039,12 +1040,25 @@ function cmdServe() {
     try { const r = coreCommit(doc, { push: true }); if (r.committed) emitEvent({ type: 'committed', pushed: r.pushed, doc }); } catch {}
   };
   const J = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
+  // SECURITY: the loopback bind is NOT an auth boundary — any web page the reviewer
+  // has open can POST to 127.0.0.1, and DNS-rebinding defeats the bind. So: reject a
+  // foreign Host (rebind), reject a cross-site Origin/Sec-Fetch (CSRF), and require a
+  // per-session token (minted here, injected into the page) on every mutation. The
+  // token is unguessable and same-origin-policy keeps a hostile page from reading it.
+  const SESSION_TOKEN = randomBytes(18).toString('base64url');
+  const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+  const hostOk = (req) => LOOPBACK.has((req.headers.host || '').replace(/:\d+$/, ''));
+  const originOk = (req) => { const o = req.headers.origin; if (!o) return true; try { return LOOPBACK.has(new URL(o).hostname); } catch { return false; } };
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://127.0.0.1');
+      const sfs = req.headers['sec-fetch-site'];
+      if (!hostOk(req)) return J(res, 403, { ok: false, error: 'forbidden host' });
+      if (!originOk(req) || (sfs && sfs !== 'same-origin' && sfs !== 'none')) return J(res, 403, { ok: false, error: 'cross-site request blocked' });
+      if (req.method !== 'GET' && req.headers['x-seal-token'] !== SESSION_TOKEN) return J(res, 403, { ok: false, error: 'missing or invalid session token' });
       if (req.method === 'GET' && url.pathname === '/') {
         const { r } = loadSidecar(doc);
-        const html = buildPage(doc, r, { mode: 'serve' });
+        const html = buildPage(doc, r, { mode: 'serve', token: SESSION_TOKEN });
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(html); return;
       }
       if (req.method === 'GET' && url.pathname === '/api/state') {

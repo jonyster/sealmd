@@ -339,7 +339,7 @@ export function renderReviewPage({
   title, owner = null, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
   curatedRoles = [], reviewerRole = '', people = [], mcp = [],
   canCommit = false, gitRemote = null, autoCommit = false, dirty = false, canPR = false,
-  mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static',
+  mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static', token = '',
 }) {
   if (!roles.length) roles = [{ role: 'General', ...deriveSummary(mdRaw, wordCount) }];
 
@@ -422,7 +422,7 @@ export function renderReviewPage({
     people: Array.isArray(people) ? people : [],
     mcp: Array.isArray(mcp) ? mcp : [],
     taxonomy: taxonomy.map((t) => ({ slug: t.slug, label: t.label })),
-    canCommit, gitRemote, autoCommit, dirty, canPR,
+    canCommit, gitRemote, autoCommit, dirty, canPR, token,
   }).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html><html lang="en" data-theme="dark"><head>
@@ -942,6 +942,9 @@ export function renderReviewPage({
 
 <script>
 const SEAL = ${SEAL_JS_DATA};
+// SECURITY: attach the per-session token to every same-origin /api/* call so the
+// server can reject anything that didn't originate from this page (CSRF defense).
+if(SEAL.token){const _f=window.fetch;window.fetch=(u,o)=>{o=o||{};if(typeof u==='string'&&u.startsWith('/api/')){o.headers={...(o.headers||{}),'x-seal-token':SEAL.token};}return _f(u,o);};}
 const root=document.documentElement, tk='seal-theme';
 try{const s=localStorage.getItem(tk); if(s) root.setAttribute('data-theme',s);}catch(e){}
 document.getElementById('themeBtn').onclick=()=>{const n=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',n);try{localStorage.setItem(tk,n)}catch(e){}};

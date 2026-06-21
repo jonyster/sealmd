@@ -19,7 +19,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { makeWorkspace, initWorkspace, runSeal, SEAL } from './helper.mjs';
+import { makeWorkspace, initWorkspace, runSeal, SEAL, sealToken } from './helper.mjs';
 
 // ---------------------------------------------------------------------------
 // local helpers (NOT added to the shared harness — parallel authors race on it)
@@ -69,9 +69,11 @@ async function withServe(ws, extraArgs, fn) {
   }
 }
 
-const jpost = (base, path, body) =>
-  fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) })
-    .then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }));
+const jpost = async (base, path, body) => {
+  const token = await sealToken(base);
+  const r = await fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-seal-token': token }, body: JSON.stringify(body || {}) });
+  return { status: r.status, json: await r.json().catch(() => null) };
+};
 
 // ===========================================================================
 // summary (cmdSummary)

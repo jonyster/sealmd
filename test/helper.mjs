@@ -73,6 +73,13 @@ export function initWorkspace(opts = {}) {
   return ws;
 }
 
+// The serve API now requires a per-session token (CSRF defense) on every POST.
+// The token is embedded in the served page; fetch it once so test POSTs can pass it.
+export async function sealToken(base) {
+  const html = await (await fetch(base + '/')).text();
+  return (html.match(/"token":"([^"]+)"/) || [, ''])[1];
+}
+
 export const SAMPLE_DOC = `# Sample PRD
 
 ## Overview

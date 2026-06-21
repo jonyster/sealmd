@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { makeWorkspace, runSeal, SAMPLE_DOC, SEAL } from './helper.mjs';
+import { makeWorkspace, runSeal, SAMPLE_DOC, SEAL, sealToken } from './helper.mjs';
 
 // --- local helpers (defined here so we never edit the shared harness) -------
 
@@ -399,7 +399,7 @@ async function withServer(ws, fn) {
 async function postJson(base, path, body) {
   const res = await fetch(base + path, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-seal-token': await sealToken(base) },
     body: JSON.stringify(body),
   });
   let json = null;

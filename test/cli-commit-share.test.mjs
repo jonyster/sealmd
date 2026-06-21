@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { SEAL, makeWorkspace, runSeal, SAMPLE_DOC } from './helper.mjs';
+import { SEAL, makeWorkspace, runSeal, SAMPLE_DOC, sealToken } from './helper.mjs';
 
 // Run a git command in a workspace and return trimmed stdout.
 function git(cwd, args) {
@@ -249,8 +249,9 @@ function startServer({ cwd, doc, port, env = {} }) {
 }
 
 async function postJSON(port, path, body) {
-  const res = await fetch(`http://127.0.0.1:${port}${path}`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
+  const base = `http://127.0.0.1:${port}`;
+  const res = await fetch(base + path, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-seal-token': await sealToken(base) },
     body: JSON.stringify(body || {}),
   });
   const text = await res.text();
