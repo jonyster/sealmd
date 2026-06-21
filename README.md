@@ -4,7 +4,7 @@
 
 ### Your agent wrote the doc. Where did the review go?
 
-*sealmd turns an agent-written Markdown doc into a sign-off-ready review that lives next to it in your repo — two committed files, reviewed and approved by real people.*
+*sealmd turns an agent-written Markdown doc into a sign-off-ready review that lives next to it in your repo — two committed files, so the right humans actually read and approve it.*
 
 <br>
 
@@ -18,7 +18,7 @@
 /sealmd
 ```
 
-<sub>Claude Code: install first (see <a href="#install-for-claude-code">Quick start</a>). Other agents: see <a href="AGENTS.md">AGENTS.md</a>.</sub>
+<sub>Install once for your agent — Claude Code: see <a href="#install">Quick start</a>; Cursor / Codex / Copilot: see <a href="AGENTS.md">AGENTS.md</a>.</sub>
 
 </div>
 
@@ -72,11 +72,12 @@ just opens it. (`/seal-new` and `/seal-open` are the explicit versions.)
 
 In the page → pick a **role** for a tailored summary → select text to **Comment / Suggest** → **Accept** a suggestion (it rewrites `spec.md`) → **Approve**.
 
-#### Install for Claude Code
+#### Install
 ```
 /plugin marketplace add jonyster/sealmd
 /plugin install sealmd@sealmd
 ```
+**Cursor / Codex / Copilot:** no plugin install — the rules/instructions files ship in the repo; see [AGENTS.md](AGENTS.md) for the one-step wiring.
 
 <details>
 <summary>Power users — drive the CLI directly</summary>
