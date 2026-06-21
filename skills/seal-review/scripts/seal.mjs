@@ -126,11 +126,11 @@ function readSummaryRoles(doc) {
   } catch {}
   return [];
 }
-function findRole(roles, name) {
+export function findRole(roles, name) {
   if (!name) return null;
   const n = name.trim().toLowerCase();
   return roles.find((r) => (r.role || '').toLowerCase() === n)
-    || roles.find((r) => (r.role || '').toLowerCase().includes(n) || n.includes((r.role || '').toLowerCase().split(/[ (]/)[0]))
+    || roles.find((r) => { const rl = (r.role || '').toLowerCase(); return rl && (rl.includes(n) || n.includes(rl.split(/[ (]/)[0])); })
     || null;
 }
 // ---- people directory + notification prefs --------------------------------
@@ -807,6 +807,7 @@ function ghReady() {
 // disambiguates repeated quotes), else the bare quote. null if neither is found.
 export function anchorDocLine(docText, anchor = {}) {
   const q = anchor.quote || '';
+  if (!q) return null; // no quote = degenerate anchor; a prefix match must not place it on line 1
   const pre = anchor.prefix || '';
   let off = -1;
   if (pre) { const i = docText.indexOf(pre + q); if (i >= 0) off = i + pre.length; }
@@ -1007,10 +1008,12 @@ function emitEvent(ev) {
   const nc = arg('notify-cmd');
   if (nc) { try { spawn(nc, { shell: true, stdio: 'ignore', env: { ...process.env, SEAL_EVENT: JSON.stringify(ev) } }).unref(); } catch {} }
 }
-function readBody(req) {
+export function readBody(req) {
   return new Promise((resolve) => {
     let b = ''; req.on('data', (c) => { b += c; if (b.length > 1e6) req.destroy(); });
     req.on('end', () => { try { resolve(b ? JSON.parse(b) : {}); } catch { resolve({}); } });
+    req.on('close', () => resolve({})); // destroy() (over-cap) never fires 'end' — first resolve wins
+    req.on('error', () => resolve({}));
   });
 }
 function cmdServe() {
