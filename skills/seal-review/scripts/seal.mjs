@@ -403,7 +403,10 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
       if (roles.length) break;
     } catch {}
   }
-  if (!roles.length) roles = [{ role: 'General', ...deriveSummary(md, wordCount) }];
+  // No agent-authored summary on file → we render an auto-derived one and flag it
+  // as generic so the page doesn't dress a headings-restatement as a role-tailored digest.
+  const genericSummary = !roles.length;
+  if (genericSummary) roles = [{ role: 'General', ...deriveSummary(md, wordCount) }];
   const comments = r.comments.map((cm) => ({ ...cm, anchor_status: resolveAnchor(cm.anchor, md) }));
   const review = approvalState(r, ch);
   let srcUrl = null;
@@ -438,7 +441,7 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
     people, mcp, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
     canPR: git.inRepo && !!git.remote && ghReady(),
-    mdRaw: md, contentHash: ch, wordCount, comments, review, mode, token,
+    mdRaw: md, contentHash: ch, wordCount, comments, review, mode, token, generic: genericSummary,
     renderedAt: 'rendered ' + nowISO(),
   });
 }

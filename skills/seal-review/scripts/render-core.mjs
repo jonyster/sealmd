@@ -229,7 +229,7 @@ const ICONS = {
 // key_decisions:[{label,value}], needs_attention|needs_your_judgment:[...],
 // relevant_sections?:[{section,detail}] }. Produces the READY-state markup
 // AFTER the .lenspills (lead / key decisions / what-this-means / your-call).
-function summaryReadyInner(summary, wordCount) {
+function summaryReadyInner(summary, wordCount, generic = false) {
   const lead = String(summary.role_lead || summary.lead || '');
   // Tolerate BOTH shapes: objects ({label,value} / {section,detail}) AND bare
   // strings (older/other agent output). A string key_decision has no label, so we
@@ -262,7 +262,7 @@ function summaryReadyInner(summary, wordCount) {
 ${kds.length ? `<h3>Key decisions</h3><ul class="keys">${keys}</ul>` : ''}
 ${secs.length ? `<h3>What this means for you</h3><div class="rsecs">${rsecs}</div>` : ''}
 ${judg.length ? `<h3>Your call to make</h3>${judges}` : ''}
-<div class="meta2"><span>Full document: <b>${wordCount.toLocaleString()} words</b></span><span class="sep">·</span><span>written for your role</span><span class="sep">·</span><span>open “Full doc” for everything</span></div>`;
+<div class="meta2"><span>Full document: <b>${wordCount.toLocaleString()} words</b></span><span class="sep">·</span><span>${generic ? 'auto-derived from headings' : 'written for your role'}</span><span class="sep">·</span><span>open “Full doc” for everything</span></div>`;
 }
 
 function avInitials(name) { return escapeHtml(String(name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()); }
@@ -339,8 +339,9 @@ export function renderReviewPage({
   title, owner = null, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
   curatedRoles = [], reviewerRole = '', people = [], mcp = [],
   canCommit = false, gitRemote = null, autoCommit = false, dirty = false, canPR = false,
-  mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static', token = '',
+  mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static', token = '', generic = false,
 }) {
+  const isGeneric = generic || !roles.length;   // auto-derived summary, not agent-tailored
   if (!roles.length) roles = [{ role: 'General', ...deriveSummary(mdRaw, wordCount) }];
 
   const comms = comments.map((c) => ({ ...c, anchor_status: c.anchor_status || (c.anchor ? 'unanchored' : 'none') }));
@@ -362,7 +363,7 @@ export function renderReviewPage({
   const roleLabels = {}; // slug -> human label
   for (const r of roles) {
     const slug = slugifyRole(r.role) || 'general';
-    roleMap[slug] = summaryReadyInner(r, wordCount);
+    roleMap[slug] = summaryReadyInner(r, wordCount, isGeneric);
     roleLabels[slug] = r.role;
   }
   const defaultLabel = reviewerRole || roles[0].role;
@@ -386,15 +387,22 @@ export function renderReviewPage({
 
   // Pills are rendered CLIENT-side from a sticky, user-editable set (localStorage).
   // The ▼ dropdown opens the full taxonomy to add a role; each added pill has an ×.
-  const summaryHtml = `<div class="stag">${ICONS.spark} Seal summary · written for <b>${escapeHtml(defaultLabel)}</b></div>
-<div class="rolebar">
+  // When the summary is auto-derived (no agent authored one), don't dress it as a
+  // role-tailored digest or imply other roles are one click away. In static mode the
+  // role picker is hidden entirely; in serve mode it stays (the agent can generate).
+  const stag = isGeneric
+    ? `<div class="stag">${ICONS.spark} Auto-generated summary · <b>no agent yet</b></div>`
+    : `<div class="stag">${ICONS.spark} Seal summary · written for <b>${escapeHtml(defaultLabel)}</b></div>`;
+  const rolebar = (isGeneric && mode !== 'serve') ? '' : `<div class="rolebar">
   <form class="lensbox" id="lensForm" autocomplete="off">
     <input id="roleInput" class="lensin" value="${escapeHtml(defaultLabel)} summary" placeholder="Summary for… type any role" aria-label="Summary role" spellcheck="false">
     <button class="lensgo" type="submit" aria-label="Apply">${ICONS.arrow}</button>
     <button class="lensdrop" id="lensMore" type="button" aria-label="Browse roles" title="Browse roles">▾</button>
   </form>
   <span class="rl-hint">type any role, or ▾ to pick · pills stay — × to remove</span>
-</div>
+</div>`;
+  const summaryHtml = `${stag}
+${rolebar}
 <div class="lensmenu" id="lensMenu" hidden></div>
 <div class="lenspills" id="lensPills"></div>
 <div id="sumReady">${roleMap[defaultSlug]}</div>`;
@@ -836,7 +844,7 @@ export function renderReviewPage({
       ${(!gitRemote && canCommit) ? `<button class="ghost" id="needRemote" title="This repo has no remote — add one (or paste a repo) to share">↗ Add a repo to share</button>` : ''}
       <button class="ghost" id="shareBtn" title="Share this review">↗ Share</button>
       <button class="ghost" id="themeBtn" title="Toggle theme">◐</button>
-      <span class="src" title="zero network calls">🔒 offline</span>
+      <span class="src" title="${mode === 'serve' ? 'local server, loopback-only + token-authenticated' : 'this file makes no network calls'}">🔒 ${mode === 'serve' ? 'local' : 'offline'}</span>
     </div>
     <div class="substrip">
       ${srcChip}
@@ -913,7 +921,7 @@ export function renderReviewPage({
 <div class="footbanner" id="footBanner">
   <span class="fb-ic">🔒</span>
   <span>Rendered 100% locally${renderedAt ? ` · ${escapeHtml(renderedAt)}` : ''} · content hash <code>${escapeHtml(contentHash.slice(0, 8))}…${escapeHtml(contentHash.slice(-3))}</code></span>
-  <span class="fb-pill">offline · tamper-evident</span>
+  <span class="fb-pill" title="approvals bind to the content hash and go stale when the doc changes">content-bound · drift-detected</span>
 </div>
 
 <div class="toast" id="toast"></div>

@@ -18,7 +18,8 @@ Common commands:
 - `accept --in doc.md --id ID` — apply a suggestion to `doc.md`.
 - `dismiss --in doc.md --id ID` — resolve a comment.
 - `render --in doc.md --open` — build the review page.
-- `serve --in doc.md --open` — live review server (run it in the background and
-  react to the `SEAL_EVENT` lines it prints — see AGENTS.md "live loop").
+- `start --in doc.md --open` — init-if-needed **then** serve (use this to launch; plain
+  `serve` errors on a doc with no sidecar). Run it in the background and react to the
+  `SEAL_EVENT` lines it prints — see AGENTS.md "live loop".
 
 Always commit `doc.md` + `doc.seal.md`; `*.review.html` is generated and gitignored.

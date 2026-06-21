@@ -394,9 +394,20 @@ test('renderReviewPage renders a suggestion card', () => {
 
 test('renderReviewPage handles empty roles by auto-deriving a General summary', () => {
   const html = renderReviewPage(minimalOpts({ roles: [], wordCount: 9 }));
-  // stag announces it is written for a role (defaults to General)
+  // empty roles → honest generic state, NOT a role-tailored ("written for") digest
+  assert.ok(html.includes('Auto-generated summary'), 'labels the summary as auto-generated');
+  assert.ok(!html.includes('written for'), 'does not claim it is written for a role');
+});
+
+test('renderReviewPage: generic summary in static mode hides the role picker', () => {
+  const html = renderReviewPage(minimalOpts({ roles: [], wordCount: 9, mode: 'static' }));
+  assert.ok(!html.includes('id="roleInput"'), 'no role input when generic + static');
+});
+
+test('renderReviewPage: agent-authored roles keep the tailored "written for" header', () => {
+  const html = renderReviewPage(minimalOpts({ roles: [{ role: 'Engineering', lead: 'x' }], wordCount: 9 }));
   assert.ok(html.includes('written for'));
-  assert.ok(html.includes('General'));
+  assert.ok(html.includes('id="roleInput"'), 'role picker present for real summaries');
 });
 
 test('renderReviewPage embeds client JSON with < escaped to prevent </script> breakout', () => {

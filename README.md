@@ -2,25 +2,23 @@
 
 # ◆ &nbsp;sealmd
 
-### Turn a Markdown file into a sign-off-ready review — **fully local**.
+### Your agent wrote the doc. Where did the review go?
 
-*Two committed files. Local-first — nothing leaves your machine except opt-in notifications. Works with every AI coding agent.*
+*sealmd turns an agent-written Markdown doc into a sign-off-ready review that lives next to it in your repo — two committed files, reviewed and approved by real people.*
 
 <br>
 
 [![Zero dependencies](https://img.shields.io/badge/dependencies-0-success)](#)
 [![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)](#)
-[![Local-first](https://img.shields.io/badge/network-local--first-blue)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-5266eb)](#)
-
-**Claude Code** · **Cursor** · **OpenAI Codex** · **GitHub Copilot**
 
 <br>
 
-```bash
-node skills/seal-review/scripts/seal.mjs serve --in spec.md --open
 ```
+/sealmd
+```
+
+<sub>Claude Code: install first (see <a href="#install-for-claude-code">Quick start</a>). Other agents: see <a href="AGENTS.md">AGENTS.md</a>.</sub>
 
 </div>
 
@@ -30,24 +28,30 @@ node skills/seal-review/scripts/seal.mjs serve --in spec.md --open
 
 Your agent writes a PRD, a spec, an RFC. Then a human has to **actually approve it** — and a 6,000-word doc nobody reads is a rubber stamp, not a review.
 
-**sealmd** makes that review real, without a SaaS, an account, or a single network call:
+**sealmd** makes that review real, without a SaaS or an account:
 
-- 📄 **A doc, not a dashboard** — a calm, paper-feeling page a busy reviewer signs off in minutes.
-- ⚡ **~90-second summary, tailored to *your* role** — Compliance sees compliance; Eng sees architecture.
-- 💬 **Comment & suggest right on the text** — select a span, leave a note or a proposed edit.
-- ✅ **Real sign-off** — approvals bind to the content hash; edit the doc and approvals go *stale* on their own.
-- 🔌 **No lock-in** — it's two Markdown files in your repo. Diff them, commit them, own them.
+- **A doc, not a dashboard** — a calm, paper-feeling page a busy reviewer reads in minutes.
+- **~90-second summary your agent tailors to each reviewer's role** — Compliance sees compliance, Eng sees architecture (a generic one renders if you skip it).
+- **Comment & suggest right on the text** — select a span, leave a note or a proposed edit.
+- **Content-bound decisions** — approvals bind to the doc's content hash and go **stale** the next time the review is rendered after the text changes.
+- **No lock-in** — it's two Markdown files in your repo. Diff them, commit them, own them.
 
-> Tamper-**evident**, not tamper-proof. The sidecar is plain text; git history is the real audit trail. Verified-identity approvals + a hosted shared link are the paid `seal publish` step — everything else is right here, free and offline.
+> The local tier is **honest, not cryptographic**: authors are self-asserted and the sidecar is editable text — `git diff` and git history are the audit trail. Verified identity + a hosted shared link are the paid `seal publish` step. Everything else is right here, free.
+
+---
+
+## Who it's for
+
+Anyone whose **agent produces docs that other people need to review and approve** — you run the agent (Claude Code, Cursor, Codex, Copilot); the reviewers just open a page (engineers can open a PR instead). You don't have to be an engineer; you do have to run an agent.
 
 ---
 
 ## The model
 
 ```
-spec.md            the document under review        ← committed
+spec.md            the document under review                              ← committed
 spec.seal.md       the sidecar: comments, suggestions, approvals, state   ← committed
-spec.review.html   a self-contained review page     ← generated, gitignored
+spec.review.html   a self-contained review page                          ← generated, gitignored
 ```
 
 `spec.seal.md` is human-readable Markdown whose records are structured JSON blocks — readable in any editor, diffable in any PR, parseable by the tool.
@@ -63,11 +67,19 @@ In **Claude Code** (or Cursor / Codex / Copilot), just say:
 ```
 
 `/sealmd` is the only command most people need. **New doc** → it asks the owner,
-your role, and how to share (Slack/Teams/Email via MCP, or git), then opens the
-live review. **Existing doc** → it just opens it. (`/seal-new` and `/seal-open`
-are the explicit versions.)
+your role, and how to share, then opens the live review. **Existing doc** → it
+just opens it. (`/seal-new` and `/seal-open` are the explicit versions.)
 
-Power users — drive the CLI directly:
+In the page → pick a **role** for a tailored summary → select text to **Comment / Suggest** → **Accept** a suggestion (it rewrites `spec.md`) → **Approve**.
+
+#### Install for Claude Code
+```
+/plugin marketplace add jonyster/sealmd
+/plugin install sealmd@sealmd
+```
+
+<details>
+<summary>Power users — drive the CLI directly</summary>
 
 ```bash
 ENG="node /path/to/sealmd/skills/seal-review/scripts/seal.mjs"
@@ -75,12 +87,10 @@ $ENG start   spec.md                             # init-if-needed + open live re
 $ENG comment --in spec.md --body "tighten scope" --anchor "exact span" --mention alice
 $ENG submit  --in spec.md && $ENG approve --in spec.md --approver lead --note "LGTM"
 ```
+</details>
 
-In the page → pick your **role** for a tailored summary → select text to **Comment / Suggest** → **Accept** a suggestion (it rewrites `spec.md`) → **Approve**.
-
----
-
-## Works with any AI agent
+<details>
+<summary>Wire it into any AI agent</summary>
 
 The engine is one plain CLI, so the same tool drives them all — each just reads its own instruction file:
 
@@ -91,13 +101,8 @@ The engine is one plain CLI, so the same tool drives them all — each just read
 | **OpenAI Codex** | `AGENTS.md` |
 | **GitHub Copilot** | `.github/copilot-instructions.md` |
 
-All point back to the canonical [`AGENTS.md`](AGENTS.md). Any of them just runs `node skills/seal-review/scripts/seal.mjs … --in doc.md`.
-
-#### Claude Code
-```
-/plugin marketplace add jonyster/sealmd
-/plugin install sealmd@sealmd
-```
+All point back to the canonical [`AGENTS.md`](AGENTS.md).
+</details>
 
 ---
 
@@ -119,7 +124,7 @@ flowchart TD
     A -->|"share (via MCP)"| X
 ```
 
-A **loopback** server — never public. The page **writes your files**; each action streams a `SEAL_EVENT` to the agent, which writes back tailored summaries and shares via your MCPs. No backend of ours; the core review loop needs no keys (only opt-in email/Slack notifications do). Git is the transport between people.
+The review server binds `127.0.0.1` and token-authenticates every action. The page **writes your files**; each action streams a `SEAL_EVENT` to the agent, which writes back tailored summaries and shares via your MCPs. There's no backend of ours — the core review loop needs no keys; only opt-in email/Slack notifications do. Git is the transport between people.
 
 ---
 
@@ -127,22 +132,23 @@ A **loopback** server — never public. The page **writes your files**; each act
 
 | | |
 |---|---|
-| 🎯 **Role-tailored summaries** | Pick or type any role; the digest re-writes for it. Pills are sticky & editable. |
-| 💬 **Anchored comments** | Select text → comment. Click a highlight → jump to its comment, and back. |
-| ✏️ **Suggestions** | Propose `old → new`; **Accept** applies it straight to `spec.md`. |
-| ✅ **Approvals** | Submit → approve / request changes, quorum, auto-stale on edit. |
-| 🏷️ **@mentions** | Tag people (auto-scraped from the doc); notify via git, Slack, Teams, email. |
-| 🔗 **Share** | GitHub / Slack / Email — gated on the MCPs you actually have connected. |
-| 🌙 **Dark by default** | Calm-paper light + dark, remembers your choice. |
-| 🔒 **Local-first** | The rendered review page makes no external requests — verifiable, offline, yours. Slack/Teams/email notifications are **opt-in**: off unless you set a webhook or key. |
+| **Role-tailored summaries** | Pick or type a role; your agent writes the digest for it. A generic summary renders with no agent. |
+| **Anchored comments** | Select text → comment. Click a highlight → jump to its comment, and back. |
+| **Suggestions** | Propose `old → new`; **Accept** applies it straight to `spec.md`. |
+| **Approvals** | Submit → approve / request changes, quorum, auto-stale on edit. |
+| **@mentions** | Tag people (auto-scraped from the doc); notify via git, Slack, Teams, email. |
+| **Share** | A GitHub PR (via local `gh`), a portable HTML file, or a paid hosted link. |
+| **Dark by default** | Calm-paper light + dark, remembers your choice. |
 
 ---
 
-## Guarantees
+## What it does — and doesn't
 
-**Does** — content-bound comments/approvals (sha256 of the normalized doc), drift detection, parity-frozen hashing, a fully self-contained offline page.
+**Does** — content-bound comments/approvals (sha256 of the normalized doc), automatic drift detection on edit, parity-frozen hashing, and a self-contained offline review **file** that makes no network calls of its own.
 
-**Does not** — verify identity (authors are self-asserted), make the sidecar immutable (it's editable text — `git diff` is the backstop), or guarantee delivery. Those are the hosted `seal publish` boundary.
+**Doesn't** — verify identity (authors are self-asserted), make the sidecar immutable (it's editable text — `git diff` is the backstop), or guarantee notification delivery. Cryptographic identity and a real shared link are the hosted `seal publish` boundary.
+
+> Two honest caveats: (1) the offline guarantee is about the generated `spec.review.html` **file** — while `seal serve` runs it is a local web server (loopback-bound and token-authenticated, but a server); (2) "no network calls" means none of its own — external images or links you put in the doc still load on open.
 
 ---
 
@@ -158,7 +164,9 @@ The only outbound network is **opt-in notifications**, off by default:
 | Email | `SEAL_RESEND_KEY` + `--email-to` | event text | [Resend](https://resend.com) under **your** key |
 | Share / sync | your connected MCP (GitHub, etc.) or local `gh` CLI | what that channel sends | the service **you** connected |
 
-The local review server binds **`127.0.0.1` only** (never a public interface). Webhook URLs and keys live in `*.seal.notify.json`, which is gitignored. Remove the flags/env and the tool makes zero outbound calls.
+Webhook URLs and keys live in `*.seal.notify.json`, which is gitignored. Remove the flags/env and the tool makes zero outbound calls.
+
+---
 
 ## Roadmap
 
@@ -170,6 +178,6 @@ Fuzzy anchor relocation · `seal watch` auto-refresh · committed-HTML mode · g
 
 **MIT** · built to be forked · PRs welcome
 
-*Made for agents and the humans who sign off on their work.*
+*For the agents that write the docs — and the people who sign off on them.*
 
 </div>
