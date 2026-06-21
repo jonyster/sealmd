@@ -810,7 +810,7 @@ export function renderReviewPage({
 <div class="chrome" id="chrome">
   <header class="top">
     <div class="row">
-      <a class="logo" href="#" title="Seal"><span class="seal-mark">${SEAL_SVG}</span> Seal</a>
+      <a class="logo" href="https://sealmd.net" target="_blank" rel="noopener" title="Seal — sealmd.net"><span class="seal-mark">${SEAL_SVG}</span> Seal</a>
       <div class="titlewrap">
         <div class="doctitle" id="docTitle" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
         <span class="docver" id="sealHandle" title="Document version">${verChip}</span>
@@ -1261,7 +1261,7 @@ function renderShare(){
   let html='';
   // GitHub PR via local gh CLI — no MCP needed. Top of the dialog when available.
   if(isServe&&SEAL.canPR){
-    html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button></div></div>';
+    html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button><button class="btn ghost tiny" id="autoPush" aria-pressed="'+(SEAL.autoCommit?'true':'false')+'" title="Commit &amp; push the sidecar after every comment, so concurrent reviewers stay in sync">'+(SEAL.autoCommit?'auto push: on':'auto push')+'</button></div></div>';
   }
   // Send to reviewers — download the bundle (.zip) from the browser + copy a
   // ready-to-send note. (Slack / email channels dropped for now.)
@@ -1283,7 +1283,7 @@ function renderShare(){
     html+='<div class="opt"><b>📄 Self-contained file</b><p>This page is already the file — send it yourself. Run <code>seal serve</code> for a live link where reviewers comment.</p></div>';
   }
   if(!isServe)html+='<div class="opt"><b>🔗 Live + writable</b><p>Run <code>seal serve</code> for a local link where reviewers comment.</p></div>';
-  html+='<div class="opt"><b>🌐 Shared link + verified identity</b><p>A hosted link reviewers open from anywhere with sign-in — the <code>seal publish</code> step.</p></div>';
+  html+='<div class="opt"><b>🌐 Shared link + verified identity</b><p>One link, anywhere, any device — reviewers sign in once and every approval is bound to a verified identity. No install, no repo access, full audit trail. Publish with <code>seal publish</code> → <a href="https://sealmd.net" target="_blank" rel="noopener">sealmd.net</a>.</p></div>';
   b.innerHTML=html;
   const prGo=document.getElementById('prGo');
   if(prGo)prGo.onclick=async()=>{
@@ -1294,6 +1294,18 @@ function renderShare(){
         toast(j.created?'PR opened ✓':'PR updated ✓');}
       else{toast('Error: '+(j.error||'PR failed'));prGo.textContent='Commit & open PR';prGo.disabled=false;}}
     catch(e){toast('Error: '+e.message);prGo.textContent='Commit & open PR';prGo.disabled=false;}
+  };
+  // Auto-push toggle — flips server-side AUTO_COMMIT so the sidecar is committed
+  // and pushed after every change, keeping concurrent reviewers in sync.
+  const autoPush=document.getElementById('autoPush');
+  if(autoPush)autoPush.onclick=async()=>{
+    const next=autoPush.getAttribute('aria-pressed')!=='true';
+    autoPush.disabled=true;
+    try{const j=await(await fetch('/api/autocommit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:next})})).json();
+      if(j&&j.ok){SEAL.autoCommit=j.auto_commit;autoPush.setAttribute('aria-pressed',j.auto_commit?'true':'false');autoPush.textContent=j.auto_commit?'auto push: on':'auto push';toast(j.auto_commit?'Auto push on — sidecar pushed after each change':'Auto push off');}
+      else toast('Error: '+((j&&j.error)||'failed'));}
+    catch(e){toast('Error: '+e.message);}
+    finally{autoPush.disabled=false;}
   };
   // Copy the ready-to-send note (no visible text box).
   const copyMsg=document.getElementById('copyMsg');
