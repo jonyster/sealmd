@@ -799,6 +799,106 @@ function ghReady() {
   return _ghReady;
 }
 
+// The 1-based line in `docText` an anchor points at: locate prefix+quote (the prefix
+// disambiguates repeated quotes), else the bare quote. null if neither is found.
+export function anchorDocLine(docText, anchor = {}) {
+  const q = anchor.quote || '';
+  const pre = anchor.prefix || '';
+  let off = -1;
+  if (pre) { const i = docText.indexOf(pre + q); if (i >= 0) off = i + pre.length; }
+  if (off < 0) { const i = docText.indexOf(q); if (i < 0 || !q) return null; off = i; }
+  return docText.slice(0, off).split('\n').length;
+}
+
+// RIGHT-side line numbers that are actually part of the PR diff for `rel`. GitHub only
+// accepts a review comment on a line in the diff; a file unchanged on the branch yields
+// an empty set (→ every comment falls back to the summary).
+export function changedRightLines(G, base, head, rel) {
+  let diff = '';
+  try { diff = G(['diff', `${base}...${head}`, '--unified=0', '--', rel]); } catch { return new Set(); }
+  const set = new Set();
+  for (const line of diff.split('\n')) {
+    const m = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+    if (!m) continue;
+    const start = +m[1];
+    const count = m[2] === undefined ? 1 : +m[2];
+    for (let i = 0; i < count; i++) set.add(start + i);
+  }
+  return set;
+}
+
+// Mirror the sidecar's OPEN comments onto a GitHub PR. Comments whose anchor line is in
+// the PR diff become inline review comments; the rest collapse into one summary comment.
+// Idempotent: inline comments carry a `seal:c=<id>` marker (skipped if already posted) and
+// the summary comment carries `seal:pr-comments` (its prior copy is deleted before repost).
+// Best-effort + throws nothing the caller cares about — corePR wraps it. Returns counts.
+function corePostReviewComments(doc, git, { prUrl, head, base }) {
+  const GHB = ghBin();
+  if (!GHB || !git?.inRepo) return { inline: 0, summary: 0, skipped: 0 };
+  const repo = (() => { try { return execFileSync(GHB, ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], { cwd: git.root, encoding: 'utf8' }).trim(); } catch { return null; } })();
+  const n = (prUrl && (prUrl.match(/\/pull\/(\d+)/) || [])[1]) || null;
+  if (!repo || !n) return { inline: 0, summary: 0, skipped: 0 };
+
+  const G = (args) => execFileSync('git', args, { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  const ghApi = (args, input) => execFileSync(GHB, ['api', ...args], { cwd: git.root, encoding: 'utf8', input, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  const ghJSON = (path) => { try { return JSON.parse(ghApi([path, '--paginate']) || '[]'); } catch { return []; } };
+
+  const open = loadSidecar(doc).r.comments.filter((c) => (c.status || 'open') === 'open');
+  if (!open.length) return { inline: 0, summary: 0, skipped: 0 };
+
+  const docText = readDoc(doc);
+  const rel = (() => { try { return relative(git.root, realpathSync(doc)); } catch { return basename(doc); } })().split('\\').join('/');
+  const commitId = (() => { try { return G(['rev-parse', head]); } catch { return null; } })();
+  const diffLines = changedRightLines(G, base, head, rel);
+
+  // Already-posted inline ids (dedupe across re-runs / PR reuse).
+  const posted = new Set(ghJSON(`repos/${repo}/pulls/${n}/comments`).filter((c) => /seal:c=/.test(c.body || '')).map((c) => (c.body.match(/seal:c=([^\s>]+)/) || [])[1]));
+
+  const fmt = (c) => {
+    const who = c.author ? `**${c.author}**: ` : '';
+    const sug = c.suggestion != null ? `\n\n_Suggested:_ \`${String(c.suggestion).replace(/`/g, '​`')}\`` : '';
+    const thread = (c.thread || []).map((t) => `\n\n↳ **${t.author || '?'}**: ${t.body || ''}`).join('');
+    return `${who}${c.body || ''}${sug}${thread}`;
+  };
+
+  let inline = 0, skipped = 0;
+  const leftover = [];
+  for (const c of open) {
+    const line = anchorDocLine(docText, c.anchor || {});
+    if (commitId && line && diffLines.has(line)) {
+      if (posted.has(c.id)) { skipped++; continue; }
+      try {
+        ghApi(['--method', 'POST', `repos/${repo}/pulls/${n}/comments`, '--input', '-'],
+          JSON.stringify({ body: `<!-- seal:c=${c.id} -->\n${fmt(c)}`, commit_id: commitId, path: rel, line, side: 'RIGHT' }));
+        inline++;
+      } catch { leftover.push({ c, line }); } // e.g. line not resolvable → summary
+    } else {
+      leftover.push({ c, line });
+    }
+  }
+
+  // One summary comment for everything not inlined. Delete the prior seal summary first.
+  let summary = 0;
+  if (leftover.length) {
+    for (const ic of ghJSON(`repos/${repo}/issues/${n}/comments`)) {
+      if ((ic.body || '').includes('seal:pr-comments')) { try { ghApi(['--method', 'DELETE', `repos/${repo}/issues/comments/${ic.id}`]); } catch { /* ignore */ } }
+    }
+    const L = ['<!-- seal:pr-comments -->', `## 🦭 Seal review — ${leftover.length} comment${leftover.length === 1 ? '' : 's'}`, ''];
+    if (diffLines.size === 0) L.push(`_The reviewed doc is unchanged in this PR, so these are posted as a summary rather than inline threads._`, '');
+    for (const { c, line } of leftover) {
+      const loc = line ? `line ${line}` : 'document';
+      const kind = c.suggestion != null ? 'Suggestion' : 'Comment';
+      L.push(`- **${kind}** · _${loc}_ · on “${(c.anchor || {}).quote || ''}”`);
+      if (c.body) L.push(`  - ${c.body}`);
+      if (c.suggestion != null) L.push(`  - _suggested replacement:_ \`${String(c.suggestion).replace(/`/g, '​`')}\``);
+      for (const t of (c.thread || [])) L.push(`    - ↳ **${t.author || '?'}**: ${t.body || ''}`);
+    }
+    L.push('', '_Posted by Seal._');
+    try { ghApi(['--method', 'POST', `repos/${repo}/issues/${n}/comments`, '--input', '-'], JSON.stringify({ body: L.join('\n') })); summary = leftover.length; } catch { /* ignore */ }
+  }
+  return { inline, summary, skipped };
+}
+
 // Commit the review artifacts onto a feature branch, push, and open (or reuse) a
 // GitHub PR via `gh` — no MCP needed, the local gh login does the write. Core
 // (throws); used by the CLI `pr` command and the serve /api/pr endpoint.
@@ -836,7 +936,11 @@ function corePR(doc, { title, body, branch } = {}) {
       '--body', body || `Seal review of \`${basename(doc)}\`.`]);
     created = true;
   }
-  return { url, head, base, created, committed: commit.committed, pushed, pushError, remote: git.remote };
+  // Mirror the review comments onto the PR (inline where the diff allows, else a summary).
+  // Best-effort: a comment-posting hiccup must never fail an otherwise-open PR.
+  let comments = null;
+  try { comments = corePostReviewComments(doc, git, { prUrl: url, head, base }); } catch { /* advisory: never fail an open PR over comment mirroring */ }
+  return { url, head, base, created, committed: commit.committed, pushed, pushError, remote: git.remote, comments };
 }
 function cmdPR() {
   const doc = docPath();
