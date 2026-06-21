@@ -786,6 +786,18 @@ export function renderReviewPage({
   .btn.tiny{padding:5px 10px;font-size:12px}
   .autocommit{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-soft);border:1px solid var(--line-strong);background:var(--fill);border-radius:var(--r-md);padding:6px 10px;cursor:pointer;user-select:none}
   .autocommit input{accent-color:var(--seal);margin:0}
+  #prRow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .swc{display:inline-flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;color:var(--ink-soft);padding:8px 13px;border:1px solid var(--line-strong);background:var(--fill);border-radius:var(--r-md);cursor:pointer;user-select:none}
+  .swc input{position:absolute;opacity:0;width:0;height:0}
+  .swc .tr{position:relative;width:32px;height:18px;border-radius:999px;background:var(--line-strong);transition:background .15s;flex:none}
+  .swc .tr::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}
+  .swc input:checked + .tr{background:var(--seal)}
+  .swc input:checked + .tr::after{transform:translateX(14px)}
+  .swc input:focus-visible + .tr{outline:2px solid var(--seal);outline-offset:2px}
+  .swc[aria-disabled=true]{opacity:.55;cursor:default}
+  /* uniform Share-dialog controls: one height, one gap, aligned */
+  .sharecard .opt .btn,.sharecard .opt .swc{min-height:36px;padding-top:0;padding-bottom:0;box-sizing:border-box;margin-top:8px}
+  .sharecard #prRow,.sharecard .sharebtns{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   @keyframes pop{from{transform:translateY(5px) scale(.99);opacity:0}to{transform:none;opacity:1}}
   /* responsive */
   @media (max-width:1100px){
@@ -1261,7 +1273,7 @@ function renderShare(){
   let html='';
   // GitHub PR via local gh CLI — no MCP needed. Top of the dialog when available.
   if(isServe&&SEAL.canPR){
-    html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button><button class="btn ghost tiny" id="autoPush" aria-pressed="'+(SEAL.autoCommit?'true':'false')+'" title="Commit &amp; push the sidecar after every comment, so concurrent reviewers stay in sync">'+(SEAL.autoCommit?'auto push: on':'auto push')+'</button></div></div>';
+    html+='<div class="opt"><b>🐙 Commit &amp; open a Pull Request</b><p>Commits the review onto a branch and opens a GitHub PR via the local <code>gh</code> CLI — no integration to connect.</p><div id="prRow"><button class="btn primary tiny" id="prGo">Commit &amp; open PR</button><label class="swc" id="autoPushLbl" title="Commit &amp; push the sidecar after every comment, so concurrent reviewers stay in sync"><input type="checkbox" id="autoPush"'+(SEAL.autoCommit?' checked':'')+'><span class="tr"></span>auto push</label></div></div>';
   }
   // Send to reviewers — download the bundle (.zip) from the browser + copy a
   // ready-to-send note. (Slack / email channels dropped for now.)
@@ -1297,15 +1309,15 @@ function renderShare(){
   };
   // Auto-push toggle — flips server-side AUTO_COMMIT so the sidecar is committed
   // and pushed after every change, keeping concurrent reviewers in sync.
-  const autoPush=document.getElementById('autoPush');
-  if(autoPush)autoPush.onclick=async()=>{
-    const next=autoPush.getAttribute('aria-pressed')!=='true';
-    autoPush.disabled=true;
+  const autoPush=document.getElementById('autoPush'),autoPushLbl=document.getElementById('autoPushLbl');
+  if(autoPush)autoPush.onchange=async()=>{
+    const next=autoPush.checked;
+    autoPush.disabled=true;if(autoPushLbl)autoPushLbl.setAttribute('aria-disabled','true');
     try{const j=await(await fetch('/api/autocommit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:next})})).json();
-      if(j&&j.ok){SEAL.autoCommit=j.auto_commit;autoPush.setAttribute('aria-pressed',j.auto_commit?'true':'false');autoPush.textContent=j.auto_commit?'auto push: on':'auto push';toast(j.auto_commit?'Auto push on — sidecar pushed after each change':'Auto push off');}
-      else toast('Error: '+((j&&j.error)||'failed'));}
-    catch(e){toast('Error: '+e.message);}
-    finally{autoPush.disabled=false;}
+      if(j&&j.ok){SEAL.autoCommit=j.auto_commit;autoPush.checked=j.auto_commit;toast(j.auto_commit?'Auto push on — sidecar pushed after each change':'Auto push off');}
+      else{autoPush.checked=!next;toast('Error: '+((j&&j.error)||'failed'));}}
+    catch(e){autoPush.checked=!next;toast('Error: '+e.message);}
+    finally{autoPush.disabled=false;if(autoPushLbl)autoPushLbl.removeAttribute('aria-disabled');}
   };
   // Copy the ready-to-send note (no visible text box).
   const copyMsg=document.getElementById('copyMsg');
