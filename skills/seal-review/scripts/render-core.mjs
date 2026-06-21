@@ -1295,7 +1295,7 @@ function renderShare(){
     html+='<div class="opt"><b>📄 Self-contained file</b><p>This page is already the file — send it yourself. Run <code>seal serve</code> for a live link where reviewers comment.</p></div>';
   }
   if(!isServe)html+='<div class="opt"><b>🔗 Live + writable</b><p>Run <code>seal serve</code> for a local link where reviewers comment.</p></div>';
-  html+='<div class="opt"><b>🌐 Shared link + verified identity</b><p>One link, anywhere, any device — reviewers sign in once and every approval is bound to a verified identity. No install, no repo access, full audit trail. Publish with <code>seal publish</code> → <a href="https://sealmd.net" target="_blank" rel="noopener">sealmd.net</a>.</p></div>';
+  html+='<div class="opt"><b>🌐 Shared link + verified identity</b><p>One link, anywhere, any device — reviewers sign in once and every approval is bound to a verified identity. No install, full audit trail. Publish with <code>seal publish</code> → <a href="https://sealmd.net" target="_blank" rel="noopener">sealmd.net</a>.</p></div>';
   b.innerHTML=html;
   const prGo=document.getElementById('prGo');
   if(prGo)prGo.onclick=async()=>{
