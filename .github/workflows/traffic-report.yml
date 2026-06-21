@@ -1,0 +1,53 @@
+# Weekly GitHub traffic report -> email. Closest thing to "downloads" for a
+# plugin installed via `git clone` (clones + uniques + views + referrers).
+# Setup: two repo secrets ->
+#   TRAFFIC_TOKEN  classic PAT with `repo` scope (traffic API needs push access;
+#                  the default GITHUB_TOKEN is denied, so a PAT is required)
+#   RESEND_API_KEY your Resend key (sends from sealmd.net, already verified)
+# ponytail: GitHub keeps only 14 days of traffic, so weekly never misses data.
+name: traffic-report
+on:
+  schedule:
+    - cron: "0 13 * * 1"   # Mondays 13:00 UTC
+  workflow_dispatch: {}     # manual run = the smoke test
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull traffic + email
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          REPO: ${{ github.repository }}
+          TO: jonyster@gmail.com
+        run: |
+          set -euo pipefail
+          clones=$(gh api "repos/$REPO/traffic/clones")
+          views=$(gh api "repos/$REPO/traffic/views")
+          refs=$(gh api "repos/$REPO/traffic/popular/referrers")
+          paths=$(gh api "repos/$REPO/traffic/popular/paths")
+
+          body=$(jq -rn \
+            --argjson c "$clones" --argjson v "$views" \
+            --argjson r "$refs" --argjson p "$paths" --arg repo "$REPO" '
+            "Traffic for \($repo) — trailing 14 days\n" +
+            "============================================\n\n" +
+            "CLONES : \($c.count) total, \($c.uniques) unique\n" +
+            "VIEWS  : \($v.count) total, \($v.uniques) unique\n\n" +
+            "Clones by day:\n" +
+            ( ($c.clones // []) | map("  \(.timestamp[0:10])  \(.count) (\(.uniques)u)") | join("\n") ) +
+            "\n\nTop referrers:\n" +
+            ( if ($r|length)==0 then "  none" else ($r | map("  \(.referrer)  \(.count) (\(.uniques)u)") | join("\n")) end ) +
+            "\n\nTop paths:\n" +
+            ( if ($p|length)==0 then "  none" else ($p | map("  \(.path)  \(.count) (\(.uniques)u)") | join("\n")) end )
+          ')
+
+          jq -n --arg to "$TO" --arg text "$body" --arg repo "$REPO" '{
+            from: "sealmd traffic <traffic@sealmd.net>",
+            to: [$to],
+            subject: "sealmd traffic — \($repo)",
+            text: $text
+          }' | curl -fsS -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data @-
