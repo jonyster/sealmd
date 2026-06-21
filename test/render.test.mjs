@@ -392,6 +392,22 @@ test('renderReviewPage renders a suggestion card', () => {
   assert.ok(html.includes('suggestion'));
 });
 
+// Bug #9: a suggestion reopened after accept is {status:'open', accepted:true}.
+// It must show the "applied" badge (the doc already carries the edit), NOT a
+// second Accept button — re-accepting can't find the replaced original and dead-ends.
+test('renderReviewPage: a reopened-after-accept suggestion shows applied, not a fresh Accept', () => {
+  const html = renderReviewPage(minimalOpts({
+    mode: 'serve',
+    comments: [{
+      id: 's9', author: 'Agent', body: 'rationale', status: 'open',
+      suggestion: 'new text', accepted: true, anchor: { quote: 'old text' },
+      anchor_status: 'here',
+    }],
+  }));
+  assert.ok(html.includes('applied to the document'), 'shows the applied badge');
+  assert.ok(!html.includes('data-accept="s9"'), 'does not re-offer a broken Accept button');
+});
+
 test('renderReviewPage handles empty roles by auto-deriving a General summary', () => {
   const html = renderReviewPage(minimalOpts({ roles: [], wordCount: 9 }));
   // empty roles → honest generic state, NOT a role-tailored ("written for") digest

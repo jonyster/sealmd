@@ -273,7 +273,10 @@ function avInitials(name) { return escapeHtml(String(name || '?').split(/\s+/).m
 function cardActions(c) {
   // owner actions (shown only in serve mode via body.can-edit). Accept applies a
   // suggestion to the doc; Dismiss resolves the comment.
-  if (c.status === 'resolved') return c.accepted ? '<div class="cacc">✓ applied to the document</div>' : '';
+  // accepted is terminal: the suggestion is already in the doc. Show that on any
+  // status (a reopened-after-accept comment must not re-offer a broken Accept).
+  if (c.accepted) return '<div class="cacc">✓ applied to the document</div>';
+  if (c.status === 'resolved') return '';
   const accept = c.suggestion != null ? `<button class="btn primary tiny" data-accept="${escapeHtml(c.id)}">Accept</button>` : '';
   return `<div class="cactions owneract">${accept}<button class="btn ghost tiny" data-dismiss="${escapeHtml(c.id)}">Dismiss</button></div>`;
 }

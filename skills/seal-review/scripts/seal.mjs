@@ -1186,6 +1186,10 @@ function cmdServe() {
       }
       if (req.method === 'POST') {
         const body = await readBody(req);
+        // ponytail: no sidecar lock — every core* mutator is synchronous (load→mutate→
+        // writeSidecar with no await between), so the event loop serializes concurrent
+        // POSTs and writeSidecar's tmp+rename is atomic. Keep mutators sync; if one ever
+        // gains an await mid-mutation, add a per-doc lock or it races (lost update).
         let result;
         if (url.pathname === '/api/comment') {
           const { cm } = coreComment(doc, { author: body.author, body: body.body, anchor: body.anchor, suggestion: body.suggestion, mention: body.mention });
