@@ -435,11 +435,14 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   // Share channels are gated on available MCP integrations — the agent passes
   // `--mcp github,slack,email` (the MCPs it has) when launching serve.
   const mcp = (arg('mcp') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const git = (mode === 'serve') ? gitInfo(dirname(doc)) : { inRepo: false, remote: null };
+  // Resolve the repo regardless of mode so the filename can link to GitHub even in a
+  // static export (commit/PR controls stay serve-gated via the mode-restricted `git`).
+  const gitAll = gitInfo(dirname(doc));
+  const git = (mode === 'serve') ? gitAll : { inRepo: false, remote: null };
   // Prefer a GitHub blob link over the file:// URL — browsers block file:// nav anyway,
-  // and a teammate's link is more useful. Falls back to file:// (which the page turns
-  // into a "reveal in Finder" action) when the repo isn't on GitHub.
-  const ghUrl = githubBlobUrl(git, doc);
+  // and a teammate's link is more useful. Falls back to file:// (which the serve page
+  // turns into a "reveal in Finder" action) when the repo isn't on GitHub.
+  const ghUrl = githubBlobUrl(gitAll, doc);
   if (ghUrl) srcUrl = ghUrl;
   return renderReviewPage({
     title: r.document.title, owner: r.document.owner || null, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
