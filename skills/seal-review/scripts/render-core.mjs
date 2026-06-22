@@ -911,7 +911,6 @@ ${rolebar}
     <div class="seg" id="viewSeg">
       <button data-view="summary" class="on">Summary</button>
       <button data-view="full">Full doc</button>
-      <button data-view="md">Markdown</button>
     </div>
     <span class="mb-desc" id="modeBannerDesc">— read-only review.</span>
   </div>
