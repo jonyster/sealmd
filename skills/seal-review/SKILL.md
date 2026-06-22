@@ -124,7 +124,7 @@ render — commit it):
 
 ```json
 { "roles": [
-  { "role": "General",     "lead": "...", "key_decisions": [{"label":"...","value":"..."}], "relevant_sections": [{"section":"§N Heading","detail":"what it means for this role"}], "needs_attention": ["..."] },
+  { "role": "General",     "lead": "...", "key_decisions": [{"label":"...","value":"...","src":"blk-4"}], "relevant_sections": [{"section":"§N Heading","detail":"what it means for this role","src":"blk-3"}], "needs_attention": ["..."] },
   { "role": "Compliance",  "lead": "...", "key_decisions": [...], "relevant_sections": [...], "needs_attention": [...] },
   { "role": "Engineering", "lead": "...", "key_decisions": [...], "relevant_sections": [...], "needs_attention": [...] }
 ] }
@@ -136,7 +136,16 @@ its own block (lead → "Key decisions" → "What this means for you" →
 is the one agents skip most: give 3–6 entries, each naming a real doc section (its
 `§`/heading) and saying in one line what it means *for that role*. `key_decisions`
 ≥ 3, `needs_attention` ≥ 2. Lead each role with the decision **that role** must
-make. The first role is the default. A single-summary file (`{lead, key_decisions,
+make.
+
+**Provenance — set `src` on every `key_decision` and `relevant_section`.** It is
+the `blk-N` id of the block that point came from; the page turns the point into a
+click-to-jump link into Full doc and marks the source block. Get the authoritative
+ids first: run `seal blocks --in <doc>` (headings; add `--all` for every block) —
+it lists each block's `src` and text. Cite the heading of the section the point is
+about. `src` is optional (a point with no clean source renders as plain text), but
+include it whenever a point maps to a real section. Never guess an id — only use
+ones `seal blocks` printed. The first role is the default. A single-summary file (`{lead, key_decisions,
 relevant_sections, needs_attention}`) still works (renders as "General"); if no
 file exists the summary is auto-derived.
 

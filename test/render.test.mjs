@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  escapeHtml, renderInline, renderMarkdown, deriveSummary, renderReviewPage,
+  escapeHtml, renderInline, renderMarkdown, markdownBlocks, deriveSummary, renderReviewPage,
 } from '../skills/seal-review/scripts/render-core.mjs';
 
 // ---------------------------------------------------------------------------
@@ -278,6 +278,36 @@ test('deriveSummary on empty doc uses fallback lead and Length key', () => {
 test('deriveSummary on huge doc does not throw', () => {
   const md = Array.from({ length: 20000 }, (_, i) => `## H${i}\nbody ${i}`).join('\n\n');
   assert.doesNotThrow(() => deriveSummary(md, 99999));
+});
+
+test('deriveSummary tags each section with the blk-N of its heading', () => {
+  // blocks: blk-0 p(Lead.), blk-1 h2 Alpha, blk-2 p, blk-3 h2 Beta
+  const md = 'Lead.\n\n## Alpha\n\nbody a\n\n## Beta';
+  const s = deriveSummary(md, 9);
+  assert.equal(s.relevant_sections.find((r) => r.section === 'Alpha').src, 'blk-1');
+  assert.equal(s.relevant_sections.find((r) => r.section === 'Beta').src, 'blk-3');
+  assert.equal(s.key_decisions.find((k) => k.value === 'Alpha').src, 'blk-1');
+});
+
+test('deriveSummary ignores a "## ..." line inside a code fence (no false section)', () => {
+  const md = 'Lead.\n\n```\n## not a heading\n```\n\n## Real';
+  const s = deriveSummary(md, 9);
+  const sections = s.relevant_sections.map((r) => r.section);
+  assert.deepEqual(sections, ['Real']);
+});
+
+// ---------------------------------------------------------------------------
+// markdownBlocks — blk-N must line up with renderMarkdown's emitted anchors
+// ---------------------------------------------------------------------------
+test('markdownBlocks blk ids match the id="blk-N" the renderer emits', () => {
+  const md = '# Title\n\nA para.\n\n## Section\n\nMore.';
+  const blocks = markdownBlocks(md);
+  const html = renderMarkdown(md);
+  for (const b of blocks) {
+    assert.ok(html.includes(`id="${b.blk}"`), `${b.blk} present in rendered HTML`);
+  }
+  assert.equal(blocks[0].tag, 'h1');
+  assert.equal(blocks[0].text, 'Title');
 });
 
 // ---------------------------------------------------------------------------

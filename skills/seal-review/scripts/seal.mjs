@@ -38,7 +38,7 @@ import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { dirname, basename, relative } from 'node:path';
 import { normalizeMarkdown, contentHash } from './anchor.mjs';
-import { renderReviewPage, deriveSummary } from './render-core.mjs';
+import { renderReviewPage, deriveSummary, markdownBlocks } from './render-core.mjs';
 import { resolveMentions, notifyEnabled, dispatch as notifyDispatch, makeDigest, resolvePerson,
   sendSlack, sendTeams, sendEmail, sendEmailRich, formatEvent, extractPeople } from './notify.mjs';
 
@@ -751,6 +751,16 @@ function cmdRender() {
 
 function cmdHash() { out({ ok: true, action: 'hash', content_hash: liveHash(docPath()) }); }
 
+// List every top-level block with its blk-N id, so a summary author can cite the
+// exact jump target (src) for each key_decision / relevant_section. Headings only
+// by default (the useful anchors); --all includes paragraphs/tables/etc.
+function cmdBlocks() {
+  const doc = docPath();
+  const all = markdownBlocks(readDoc(doc));
+  const blocks = arg('all') != null ? all : all.filter((b) => /^h[1-6]$/.test(b.tag));
+  out({ ok: true, action: 'blocks', count: blocks.length, blocks: blocks.map((b) => ({ src: b.blk, tag: b.tag, text: b.text.slice(0, 120) })) });
+}
+
 // Stage the review's committable files (doc + review file + role summaries) and
 // commit — the shareable artifacts. Never touches the gitignored derived/secret
 // files. Core (throws); used by the CLI and the serve /api/commit endpoint.
@@ -1356,6 +1366,7 @@ function run() {
       case 'commit': cmdCommit(); break;
       case 'pr': cmdPR(); break;
       case 'hash': cmdHash(); break;
+      case 'blocks': cmdBlocks(); break;
       case 'doctor': cmdDoctor(); break;
       default:
         console.error(USAGE);

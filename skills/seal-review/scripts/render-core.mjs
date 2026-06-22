@@ -56,6 +56,13 @@ export function renderInline(text) {
 }
 
 export function renderMarkdown(md) {
+  return mdBlockHtml(md).map((b, n) => addBlockId(b, n)).join('\n');
+}
+
+// Top-level block HTML strings in document order. Array index === blk-N. This is
+// the single source of truth for block segmentation; renderMarkdown and
+// markdownBlocks both build on it so blk ids always line up.
+function mdBlockHtml(md) {
   const lines = md.split('\n');
   const html = [];
   let i = 0;
@@ -167,8 +174,18 @@ export function renderMarkdown(md) {
       html.push(`<p>${renderInline(joined).replace(/ BR \n/g, '<br>\n')}</p>`);
     }
   }
-  // Give every top-level block an id (blk-N) so anchors can scroll to them.
-  return html.map((b, n) => addBlockId(b, n)).join('\n');
+  return html;
+}
+
+// Top-level blocks with their blk-N id and plain text. Same segmentation as
+// renderMarkdown, so blk ids always match the rendered anchors. Used to give a
+// summary author the authoritative list of jump targets (`seal blocks`).
+export function markdownBlocks(md) {
+  return mdBlockHtml(md).map((b, n) => ({
+    n, blk: `blk-${n}`,
+    tag: (b.match(/^\s*<([a-z0-9]+)/i) || [, ''])[1].toLowerCase(),
+    text: b.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+  }));
 }
 
 // Inject id="blk-N" into the first tag of a top-level rendered block.
@@ -190,11 +207,14 @@ export function deriveSummary(md, wordCount) {
   if (!lead) lead = 'Document ready for review.';
   const key_decisions = [];
   const relevant_sections = [];
-  for (const l of lines) {
-    const m = l.match(/^##\s+(.*?)\s*#*\s*$/);
-    if (m) {
-      const label = m[1].replace(/[*_`]/g, '').trim();
-      if (label) { key_decisions.push({ label: 'Section', value: label }); relevant_sections.push({ section: label, detail: 'See the Full doc for this section.' }); }
+  // Drive off the rendered block list so each section's src=blk-N matches the
+  // anchor the renderer emits (and so fenced "## ..." inside code never counts).
+  for (const b of markdownBlocks(md)) {
+    if (b.tag !== 'h2') continue;
+    const label = b.text.replace(/[*_`]/g, '').trim();
+    if (label) {
+      key_decisions.push({ label: 'Section', value: label, src: b.blk });
+      relevant_sections.push({ section: label, detail: 'See the Full doc for this section.', src: b.blk });
     }
     if (key_decisions.length >= 8) break;
   }
@@ -244,17 +264,25 @@ function summaryReadyInner(summary, wordCount, generic = false) {
   const judg = (summary.needs_your_judgment || summary.needs_attention || [])
     .map((n) => (typeof n === 'string' ? n : (n && (n.value || n.detail || n.text)) || ''))
     .filter((n) => String(n || '').trim());
+  // ponytail: src="blk-N" provenance link (summary point -> full-doc block).
+  // When present the point becomes a clickable jump target; absent -> plain, as before.
+  // cls() merges 'hassrc' into the element's existing class so we never emit a
+  // duplicate class attribute (the parser silently drops the second one).
+  const hasSrc = (o) => String(o.src || '').trim();
+  const cls = (base, o) => { const c = [base, hasSrc(o) ? 'hassrc' : ''].filter(Boolean).join(' '); return c ? ` class="${c}"` : ''; };
+  const srcAttr = (o) => (hasSrc(o) ? ` data-src="${escapeHtml(hasSrc(o))}" tabindex="0" role="button" title="Jump to source in full doc"` : '');
+  const jarr = (o) => (hasSrc(o) ? '<span class="jarr" aria-hidden="true">↪</span>' : '');
   const keys = kds.map((k) => {
     const lab = String(k.label || '').trim();
     const val = renderInline(String(k.value || ''));
-    return lab ? `<li><span class="kk">${escapeHtml(lab)}</span><span class="vv">${val}</span></li>`
-      : `<li class="nolabel"><span class="vv">${val}</span></li>`;
+    return lab ? `<li${cls('', k)}${srcAttr(k)}><span class="kk">${escapeHtml(lab)}${jarr(k)}</span><span class="vv">${val}</span></li>`
+      : `<li${cls('nolabel', k)}${srcAttr(k)}><span class="vv">${val}${jarr(k)}</span></li>`;
   }).join('\n');
   const rsecs = secs.map((s) => {
     const sec = String(s.section || '').trim();
     const det = renderInline(String(s.detail || ''));
-    return sec ? `<div class="rsec"><div class="rsh">${escapeHtml(sec)}</div><div class="rsd">${det}</div></div>`
-      : `<div class="rsec"><div class="rsd">${det}</div></div>`;
+    return sec ? `<div${cls('rsec', s)}${srcAttr(s)}><div class="rsh">${escapeHtml(sec)}${jarr(s)}</div><div class="rsd">${det}</div></div>`
+      : `<div${cls('rsec', s)}${srcAttr(s)}><div class="rsd">${det}${jarr(s)}</div></div>`;
   }).join('\n');
   const judges = judg
     .map((n) => `<div class="judge"><span class="ji"></span><span>${renderInline(String(n))}</span></div>`).join('\n');
@@ -337,6 +365,12 @@ function approvalsPanel(review) {
 }
 
 const SEAL_SVG = `<svg viewBox="0 0 80 64" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 6 C41.74 6, 42.87 13.56, 45.21 14.25 C47.55 14.94, 52.6 9.19, 54.06 10.13 C55.52 11.07, 52.38 18.04, 53.98 19.89 C55.58 21.73, 62.93 19.62, 63.65 21.2 C64.37 22.78, 57.96 26.95, 58.31 29.37 C58.66 31.78, 65.98 33.98, 65.74 35.7 C65.49 37.42, 57.84 37.46, 56.83 39.69 C55.81 41.91, 60.79 47.71, 59.65 49.03 C58.51 50.34, 52.06 46.24, 50 47.56 C47.95 48.88, 48.99 56.46, 47.33 56.95 C45.66 57.44, 42.44 50.5, 40 50.5 C37.56 50.5, 34.34 57.44, 32.67 56.95 C31.01 56.46, 32.05 48.88, 30 47.56 C27.94 46.24, 21.49 50.34, 20.35 49.03 C19.21 47.71, 24.19 41.91, 23.17 39.69 C22.16 37.46, 14.51 37.42, 14.26 35.7 C14.02 33.98, 21.34 31.78, 21.69 29.37 C22.04 26.95, 15.63 22.78, 16.35 21.2 C17.07 19.62, 24.42 21.73, 26.02 19.89 C27.62 18.04, 24.48 11.07, 25.94 10.13 C27.4 9.19, 32.45 14.94, 34.79 14.25 C37.13 13.56, 38.26 6, 40 6 Z"/><circle cx="40" cy="32" r="13"/><path d="M33.5 32.5 L38 37 L47.5 26"/></svg>`;
+// Favicon = the same seal stamp. Data-URI favicons have no currentColor context,
+// so bake the brand stroke (#5266eb) in; crop viewBox to a square around the mark.
+const FAVICON_SVG = SEAL_SVG
+  .replace('viewBox="0 0 80 64"', 'xmlns="http://www.w3.org/2000/svg" viewBox="8 0 64 64"')
+  .replace('stroke="currentColor"', 'stroke="#5266eb"');
+const FAVICON_HREF = 'data:image/svg+xml;base64,' + Buffer.from(FAVICON_SVG).toString('base64');
 
 export function renderReviewPage({
   title, owner = null, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
@@ -438,6 +472,7 @@ ${rolebar}
 
   return `<!DOCTYPE html><html lang="en" data-theme="dark"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="${FAVICON_HREF}">
 <title>${escapeHtml(title)} — Seal review</title>
 <style>
   :root,:root[data-theme="light"]{
@@ -565,6 +600,15 @@ ${rolebar}
   :root[data-theme="dark"] mark.cmt-hl:hover,:root[data-theme="dark"] mark.cmt-hl.active{background:#7a6526}
   .anchor{scroll-margin-top:120px}.blk{position:relative}
   .page [id^="blk-"]{scroll-margin-top:120px}
+  /* ponytail: summary->doc provenance jump */
+  .hassrc{cursor:pointer;border-radius:6px;transition:background var(--t-fast,.15s) ease}
+  .hassrc:hover,.hassrc:focus{background:var(--seal-soft);outline:none}
+  .jarr{margin-left:6px;color:var(--seal);font-size:.85em;opacity:.4;transition:opacity var(--t-fast,.15s) ease}
+  .hassrc:hover .jarr,.hassrc:focus .jarr{opacity:1}
+  .page [id^="blk-"].blk-ref{position:relative}
+  .page [id^="blk-"].blk-ref::before{content:"";position:absolute;left:-14px;top:.25em;bottom:.25em;width:3px;border-radius:2px;background:var(--seal);opacity:.55}
+  .page [id^="blk-"].blk-flash{animation:blkflash 1.5s ease}
+  @keyframes blkflash{0%,100%{background:transparent}12%{background:var(--seal-soft)}}
   /* summary surface */
   .summary .stag{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--ink-soft);background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:6px 12px}
   .summary .stag .icon{width:14px;height:14px;color:var(--ink-soft)}
@@ -968,7 +1012,9 @@ function setView(v){
   document.querySelectorAll('#viewSeg button').forEach(x=>x.classList.toggle('on',x.dataset.view===v));
   body.classList.remove('view-summary','view-full','view-md');body.classList.add('view-'+v);
   try{sessionStorage.setItem('seal-view',v)}catch(e){}
-  if(v==='full'){highlightAnchors();scheduleAlign();}
+  if(v==='full'){highlightAnchors();scheduleAlign();markReferencedBlocks();}
+  // ponytail: re-mark on role switch only if it proves needed — pills live in the
+  // summary header, hidden in full view, so this covers the common path.
 }
 document.getElementById('viewSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setView(b.dataset.view);});
 
@@ -1146,9 +1192,30 @@ var alignRaf=0;
 function alignOnScroll(){if(alignRaf)return;alignRaf=requestAnimationFrame(function(){alignRaf=0;alignCards();});}
 window.addEventListener('scroll',alignOnScroll);
 window.addEventListener('resize',scheduleAlign);
-window.addEventListener('load',function(){highlightAnchors();alignCards();});
+window.addEventListener('load',function(){highlightAnchors();alignCards();markReferencedBlocks();});
 setTimeout(function(){highlightAnchors();alignCards();},300);
 setTimeout(alignCards,800);
+
+// ---- summary -> full-doc provenance jump (ponytail prototype) ----
+// Delegated on document so it survives client-side summary re-render (applyRole).
+function jumpToSrc(src){
+  if(!src)return;
+  if(!body.classList.contains('view-full'))setView('full');
+  var el=document.getElementById(src);if(!el)return;
+  el.classList.remove('blk-flash');void el.offsetWidth;el.classList.add('blk-flash');
+  setTimeout(function(){el.classList.remove('blk-flash');},1500);
+  if(el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'center'});
+}
+document.addEventListener('click',function(e){var s=e.target.closest&&e.target.closest('.hassrc[data-src]');if(s)jumpToSrc(s.getAttribute('data-src'));});
+document.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){var s=e.target.closest&&e.target.closest('.hassrc[data-src]');if(s){e.preventDefault();jumpToSrc(s.getAttribute('data-src'));}}});
+// Persistent gutter mark on blocks the (currently visible) summary cites. Role-aware:
+// reads .hassrc from the live summary, so switching role re-marks. Visible in Full doc.
+function markReferencedBlocks(){
+  if(!page)return;
+  page.querySelectorAll('[id^="blk-"].blk-ref').forEach(function(b){b.classList.remove('blk-ref');});
+  var sum=document.getElementById('docSummary');if(!sum)return;
+  sum.querySelectorAll('.hassrc[data-src]').forEach(function(s){var el=document.getElementById(s.getAttribute('data-src'));if(el)el.classList.add('blk-ref');});
+}
 
 // ---- selection composer (sealmd extra) ----
 const selbtn=document.getElementById('selbtn'),sc=document.getElementById('selCompose'),
