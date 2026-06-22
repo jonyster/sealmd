@@ -389,9 +389,12 @@ export function renderReviewPage({
 
   const fullHtml = renderMarkdown(mdRaw);
 
-  const srcChip = srcUrl
-    ? `<a class="src" href="${escapeHtml(srcUrl)}" title="Open the source file">${escapeHtml(srcName)}</a>`
-    : `<span class="src">${escapeHtml(srcName)}</span>`;
+  // http(s) url → open it (GitHub). Otherwise a button that reveals doc.md in the OS
+  // file manager (browsers block file:// nav, so a plain link wouldn't work).
+  const srcIsHttp = /^https?:/i.test(srcUrl || '');
+  const srcChip = srcIsHttp
+    ? `<a class="src" id="srcChip" href="${escapeHtml(srcUrl)}" target="_blank" rel="noopener" title="Open ${escapeHtml(srcName)} on GitHub">${escapeHtml(srcName)} ↗</a>`
+    : `<button type="button" class="src" id="srcChip" title="Reveal ${escapeHtml(srcName)} in your file manager">${escapeHtml(srcName)}</button>`;
   const badge = statusBadge(review);
   const verChip = `v·${escapeHtml(contentHash.slice(0, 7))}`;
 
@@ -542,7 +545,8 @@ ${rolebar}
   #liveTag{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-weight:500;font-size:11px}
   #liveTag::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--seal);box-shadow:0 0 0 3px var(--seal-soft);flex-shrink:0}
   .spacer{flex:1}
-  .src{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);background:var(--fill);padding:2px 8px;border-radius:var(--r-sm);text-decoration:none}
+  .src{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);background:var(--fill);padding:2px 8px;border-radius:var(--r-sm);text-decoration:none;border:0;cursor:pointer;line-height:1.5}
+  button.src:hover,a.src:hover{color:var(--ink);background:var(--fill-strong,var(--fill))}
   a.src:hover{background:var(--panel-hover)}
   .ghost{border:1px solid var(--line-strong);background:var(--fill);color:var(--ink-soft);border-radius:var(--r-md);padding:6px 11px;font-size:12.5px;cursor:pointer;font-family:inherit;font-weight:500}
   .ghost:hover{background:var(--panel-hover)}
@@ -761,6 +765,11 @@ ${rolebar}
   .footbanner b{color:var(--ink);font-weight:600}
   .footbanner code{font-family:var(--font-mono);font-size:11px;background:var(--panel);padding:1px 5px;border-radius:var(--r-sm)}
   .footbanner .fb-pill{margin-left:auto;background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:var(--r-sm);padding:3px 10px;font-size:11px;font-weight:500;white-space:nowrap}
+  .offline-banner{position:fixed;top:0;left:0;right:0;z-index:200;background:#b3261e;color:#fff;text-align:center;padding:7px 14px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow-card)}
+  .offline-banner code{background:rgba(255,255,255,.18);border-radius:3px;padding:0 4px}
+  .opt-pending{opacity:.6}
+  body.offline #cmtPost,body.offline #scPost,body.offline [data-accept],body.offline [data-dismiss],body.offline #editBtn,body.offline #editSave,body.offline #selbtn{pointer-events:none;opacity:.45}
+  body.offline #cmtInput,body.offline #scInput,body.offline #docMd.editing{opacity:.6;pointer-events:none}
   .railjump{position:fixed;right:16px;bottom:64px;z-index:81;display:none;align-items:center;gap:7px;background:var(--ink);color:var(--paper);padding:8px 12px;border-radius:var(--r-pill);font-size:12px;font-weight:600;text-decoration:none;box-shadow:var(--shadow-pop);cursor:pointer}
   .railjump:hover{background:var(--ink-press)}
   .railjump .rj-count{background:var(--paper);color:var(--ink);border-radius:999px;font-size:11px;font-weight:600;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
@@ -946,10 +955,9 @@ ${rolebar}
           </div>
           <pre class="cmt-out" id="cmtOut"></pre>
         </div>
-        ${suggestionsHtml}
+        <div id="suggBox">${suggestionsHtml}</div>
         <div class="cards" id="cards">${cardsHtml}</div>
-        ${unanchoredNote}
-        ${railEmpty}
+        <div id="railExtra">${unanchoredNote}${railEmpty}</div>
       </div>
 
       <div class="railpane" id="paneAsk">
@@ -971,6 +979,7 @@ ${rolebar}
   <span class="fb-pill" title="approvals bind to the content hash and go stale when the doc changes">content-bound · drift-detected</span>
 </div>
 
+<div class="offline-banner" id="offlineBanner" hidden>⚠ Disconnected from <code>seal serve</code> — comments, suggestions &amp; edits are paused until it reconnects.</div>
 <div class="toast" id="toast"></div>
 
 <div id="selbtn"><button data-act="comment">💬 Comment</button><button data-act="suggest">✎ Suggest</button></div>
@@ -1196,6 +1205,91 @@ window.addEventListener('load',function(){highlightAnchors();alignCards();markRe
 setTimeout(function(){highlightAnchors();alignCards();},300);
 setTimeout(alignCards,800);
 
+// ---- live in-place refresh (no full reload → no blink, no scroll jump) ----
+// Re-fetch the page and swap ONLY the dynamic regions: the cards list, the open-
+// suggestion box, the unanchored/empty notes, the count chip, and the doc body
+// (so anchor marks re-wrap). The server is the one source of card markup; nothing
+// is rebuilt here. Falls back to a hard reload if anything goes wrong.
+async function liveRefresh(){
+  try{
+    const html=await (await fetch('/',{credentials:'same-origin'})).text();
+    const doc=new DOMParser().parseFromString(html,'text/html');
+    const repl=(id)=>{const a=document.getElementById(id),b=doc.getElementById(id);if(a&&b)a.innerHTML=b.innerHTML;};
+    repl('cards');repl('suggBox');repl('railExtra');repl('page');
+    const nc=doc.getElementById('cmtCnt'),cc=document.getElementById('cmtCnt');
+    if(nc&&cc){cc.textContent=nc.textContent;cc.style.display=(nc.textContent&&nc.textContent!=='0')?'':'none';}
+    try{setPane('comments');}catch(_){}
+    highlightAnchors();scheduleAlign();markReferencedBlocks();
+  }catch(e){window.__sealReloading=true;location.reload();}
+}
+
+// ---- optimistic comment append (zero network round-trip before it shows) ----
+// Render the new comment card from what the user typed, drop it in instantly, then
+// POST in the background. On success reconcile the temp id → real id; on failure
+// roll the card back out and restore the draft. Markup MUST mirror the server card()
+// comment branch (render-core card()). Suggestions/accept/dismiss keep liveRefresh —
+// less frequent, and the server owns their (more complex) markup.
+let optSeq=0;
+function bumpCount(d){const cc=document.getElementById('cmtCnt');if(!cc)return;const n=Math.max(0,(parseInt(cc.textContent||'0',10)||0)+d);cc.textContent=n;cc.style.display=n?'':'none';}
+function optCard(c){
+  const anc=c.anchor?(' data-anchor="'+escapeText(c.id)+'" data-quote="'+escapeText(c.anchor)+'"'):'';
+  const quoted=c.anchor?('<div class="quoted">Marked on “'+escapeText(c.anchor.slice(0,80))+(c.anchor.length>80?'…':'')+'”</div>'):'';
+  return '<div class="card opt-pending" id="card-'+escapeText(c.id)+'" data-cmt-id="'+escapeText(c.id)+'"'+anc+'>'
+    +'<div class="chead"><span class="av">'+escapeText(avLetters(c.author))+'</span>'
+    +'<div style="min-width:0"><div class="who-name">'+escapeText(c.author)+'</div><div class="who-sub">open</div></div>'
+    +'<span class="ctype">comment</span></div>'
+    +quoted+'<div class="ctext">'+escapeText(c.body)+'</div>'
+    +'<div class="cactions owneract"><button class="btn ghost tiny" data-dismiss="'+escapeText(c.id)+'">Dismiss</button></div>'
+    +'</div>';
+}
+function avLetters(n){return String(n||'?').trim().split(/\\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase()||'?';}
+function appendOpt(c){
+  if(!cardsEl)return;
+  const re=document.getElementById('railEmpty');if(re)re.style.display='none';
+  cardsEl.insertAdjacentHTML('beforeend',optCard(c));
+  bumpCount(1);
+  try{setPane('comments');}catch(_){}
+  if(c.anchor){highlightAnchors();scheduleAlign();}
+}
+function confirmOpt(tmpId,realId){
+  const el=document.getElementById('card-'+tmpId);if(!el)return;
+  el.classList.remove('opt-pending');
+  if(realId&&realId!==tmpId){
+    el.id='card-'+realId;el.setAttribute('data-cmt-id',realId);
+    if(el.getAttribute('data-anchor')){
+      el.setAttribute('data-anchor',realId);
+      const mk=page&&page.querySelector('mark.cmt-hl[data-anchor="'+CSS.escape(tmpId)+'"]');if(mk)mk.setAttribute('data-anchor',realId);
+    }
+    const ds=el.querySelector('[data-dismiss]');if(ds)ds.setAttribute('data-dismiss',realId);
+  }
+}
+function removeOpt(tmpId){const el=document.getElementById('card-'+tmpId);if(el)el.remove();bumpCount(-1);
+  const cc=document.getElementById('cmtCnt');const re=document.getElementById('railEmpty');
+  if(re&&cc&&(!cc.textContent||cc.textContent==='0'))re.style.display='';}
+
+// ---- connection guard: comments need the local seal serve reachable. This is a
+// LOCAL-first page, so the signal is "can I reach 127.0.0.1's serve", NOT the
+// internet (navigator.onLine). A dead serve (terminal closed) → block writes +
+// banner; recovers automatically when serve answers again. Static export never
+// posts to a server, so the guard is serve-mode only. ----
+let ONLINE=true;
+function setOnline(on){
+  on=!!on;if(ONLINE===on)return;ONLINE=on;
+  document.body.classList.toggle('offline',!on);
+  const b=document.getElementById('offlineBanner');if(b)b.hidden=on;
+  if(!on)toast('Disconnected — comments paused until seal serve is back');
+  else toast('Reconnected');
+}
+async function pingServe(){
+  try{const r=await fetch('/api/state',{cache:'no-store',credentials:'same-origin'});setOnline(r.ok);}
+  catch(_){setOnline(false);}
+}
+if(SEAL.mode==='serve'){
+  setInterval(pingServe,10000);
+  window.addEventListener('online',pingServe);
+  window.addEventListener('offline',()=>setOnline(false));
+}
+
 // ---- summary -> full-doc provenance jump (ponytail prototype) ----
 // Delegated on document so it survives client-side summary re-render (applyRole).
 function jumpToSrc(src){
@@ -1258,12 +1352,25 @@ function toast(m,spin){const t=document.getElementById('toast');t.innerHTML=(spi
 scPost.onclick=async()=>{
   try{localStorage.setItem('seal-author',cAuthor)}catch(e){}
   if(isServe){
-    const payload={author:cAuthor||'me',body:scInput.value.trim(),anchor:curQuote||null,suggestion:curMode==='suggest'?scSuggest.value.trim():undefined};
-    try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const j=await res.json();
-      if(j.ok){toast('Comment saved');sc.hidden=true;scInput.value='';scSuggest.value='';
-        try{sessionStorage.setItem('seal-scroll',window.scrollY)}catch(e){}setTimeout(()=>(window.__sealReloading=true,location.reload()),650);}
-      else toast('Error: '+(j.error||'unknown'));}
-    catch(e){toast('Server error: '+e.message);}
+    if(!ONLINE){toast('Disconnected — reconnect seal serve to comment');return;}
+    const bodyTxt=scInput.value.trim();const anchor=curQuote||null;
+    // Suggestions: server owns the (tracked-change) markup → POST then liveRefresh.
+    if(curMode==='suggest'){
+      const payload={author:cAuthor||'me',body:bodyTxt,anchor,suggestion:scSuggest.value.trim()};
+      try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const j=await res.json();
+        if(j.ok){toast('Suggestion sent');sc.hidden=true;scInput.value='';scSuggest.value='';liveRefresh();}
+        else toast('Error: '+(j.error||'unknown'));}
+      catch(e){setOnline(false);toast('Server error: '+e.message);}
+      return;
+    }
+    // Comment: optimistic — show instantly, POST in the background, reconcile/rollback.
+    if(!bodyTxt){scInput.focus();return;}
+    const tmp='tmp-'+(++optSeq);appendOpt({id:tmp,author:cAuthor||'me',body:bodyTxt,anchor});
+    sc.hidden=true;scInput.value='';scSuggest.value='';
+    try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({author:cAuthor||'me',body:bodyTxt,anchor})});const j=await res.json();
+      if(j.ok){confirmOpt(tmp,j.id);toast('Comment saved');}
+      else{removeOpt(tmp);toast('Error: '+(j.error||'unknown'));}}
+    catch(e){removeOpt(tmp);setOnline(false);toast('Server error: '+e.message);}
     return;
   }
   const txt=buildAgent();
@@ -1283,10 +1390,13 @@ if(cmtPost){
     try{localStorage.setItem('seal-author',who)}catch(e){}
     const bodyTxt=cmtInput.value.trim();if(!bodyTxt){cmtInput.focus();return;}
     if(isServe){
+      if(!ONLINE){toast('Disconnected — reconnect seal serve to comment');return;}
+      const tmp='tmp-'+(++optSeq);appendOpt({id:tmp,author:who,body:bodyTxt,anchor:null});
+      cmtInput.value='';
       try{const res=await fetch('/api/comment',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({author:who,body:bodyTxt,anchor:null})});const j=await res.json();
-        if(j.ok){toast('Comment saved');cmtInput.value='';try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>(window.__sealReloading=true,location.reload()),650);}
-        else toast('Error: '+(j.error||'unknown'));}
-      catch(e){toast('Server error: '+e.message);}
+        if(j.ok){confirmOpt(tmp,j.id);toast('Comment saved');}
+        else{removeOpt(tmp);cmtInput.value=bodyTxt;toast('Error: '+(j.error||'unknown'));}}
+      catch(e){removeOpt(tmp);cmtInput.value=bodyTxt;setOnline(false);toast('Server error: '+e.message);}
       return;
     }
     const txt='seal-review: comment — "'+bodyTxt+'" (by '+who+')';
@@ -1421,10 +1531,11 @@ document.getElementById('shareBtn').onclick=()=>{renderShare();shareDlg.hidden=f
 // ---- owner actions: accept suggestion / dismiss comment / edit the doc ----
 if(isServe)document.body.classList.add('can-edit');
 async function ownerPost(url,payload,msg){
+  if(!ONLINE){toast('Disconnected — reconnect seal serve first');return;}
   try{const j=await(await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)})).json();
-    if(j&&j.ok){toast(msg);try{sessionStorage.setItem('seal-scroll',window.scrollY);sessionStorage.setItem('seal-pane','comments')}catch(e){}setTimeout(()=>(window.__sealReloading=true,location.reload()),600);}
+    if(j&&j.ok){toast(msg);liveRefresh();}
     else toast('Error: '+((j&&j.error)||'failed'));}
-  catch(e){toast('Server error: '+e.message);}
+  catch(e){setOnline(false);toast('Server error: '+e.message);}
 }
 document.addEventListener('click',e=>{
   const ac=e.target.closest('[data-accept]');if(ac){e.preventDefault();e.stopPropagation();ownerPost('/api/accept',{id:ac.dataset.accept},'Suggestion applied to doc.md');return;}
@@ -1437,6 +1548,17 @@ var editCancelB=document.getElementById('editCancel');if(editCancelB)editCancelB
 var editSaveB=document.getElementById('editSave');if(editSaveB)editSaveB.onclick=async()=>{
   const md=docMdEl.innerText;if(!md.trim()){toast('Empty — not saving');return;}
   await ownerPost('/api/doc',{markdown:md},'Saved to doc.md');
+  // No reload anymore — exit edit mode by hand so the bar/contenteditable clear.
+  docMdEl.contentEditable='false';docMdEl.classList.remove('editing');editBar.hidden=true;
+};
+
+// ---- filename chip: reveal doc.md in the OS file manager (GitHub variant is a plain <a>) ----
+const srcChipEl=document.getElementById('srcChip');
+if(srcChipEl&&srcChipEl.tagName==='BUTTON')srcChipEl.onclick=async()=>{
+  if(SEAL.mode!=='serve'){toast('Run seal serve to open the file from this page');return;}
+  try{const j=await(await fetch('/api/reveal-doc',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json();
+    toast(j.ok?'Revealed '+(SEAL.srcName||'the file')+' in your file manager':'Could not reveal: '+(j.error||'error'));}
+  catch(e){toast('Error: '+e.message);}
 };
 
 // ---- copy a /sealmd:seal-role command to paste into Claude Code ----

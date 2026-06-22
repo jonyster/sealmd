@@ -1,6 +1,6 @@
 {
   "name": "sealmd",
-  "version": "0.1.0",
+  "version": "0.3.11",
   "description": "Fully-local, file-based document review (test harness).",
   "private": true,
   "type": "module",

@@ -436,6 +436,11 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   // `--mcp github,slack,email` (the MCPs it has) when launching serve.
   const mcp = (arg('mcp') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   const git = (mode === 'serve') ? gitInfo(dirname(doc)) : { inRepo: false, remote: null };
+  // Prefer a GitHub blob link over the file:// URL — browsers block file:// nav anyway,
+  // and a teammate's link is more useful. Falls back to file:// (which the page turns
+  // into a "reveal in Finder" action) when the repo isn't on GitHub.
+  const ghUrl = githubBlobUrl(git, doc);
+  if (ghUrl) srcUrl = ghUrl;
   return renderReviewPage({
     title: r.document.title, owner: r.document.owner || null, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
@@ -495,6 +500,19 @@ function maybeOpen(htmlFile) {
 // Reveal a file in the OS file manager (Finder / Explorer / default), selected
 // where the platform supports it. macOS: `open -R`; Windows: `explorer /select,`;
 // Linux has no portable "select", so open the containing folder.
+// Build an https GitHub blob URL for the doc from the origin remote + current branch,
+// so the page can link the filename to GitHub. Returns null for non-GitHub repos.
+function githubBlobUrl(git, doc) {
+  if (!git || !git.inRepo || !git.remote || !git.root) return null;
+  const m = git.remote.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/i);
+  if (!m) return null;
+  let branch = 'HEAD';
+  try { branch = execFileSync('git', ['-C', git.root, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).trim() || 'HEAD'; } catch { /* detached/no-commits → HEAD */ }
+  let rel; try { rel = relative(git.root, realpathSync(doc)); } catch { rel = relative(git.root, doc); }
+  rel = rel.split('\\').join('/');
+  return `https://github.com/${m[1]}/blob/${encodeURIComponent(branch)}/${rel.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 function revealInFileManager(file) {
   let abs = file; try { abs = realpathSync(file); } catch {}
   const cmd = process.platform === 'darwin' ? ['open', ['-R', abs]]
@@ -1137,6 +1155,13 @@ function cmdServe() {
         const outFile = htmlPath(doc);
         if (!existsSync(outFile)) return J(res, 404, { ok: false, error: 'file not exported yet' });
         try { revealInFileManager(outFile); return J(res, 200, { ok: true, file: outFile }); }
+        catch (e) { return J(res, 500, { ok: false, error: String(e.message || e) }); }
+      }
+      // reveal the SOURCE doc.md in the OS file manager — what the filename chip clicks
+      // when the repo isn't on GitHub. Path recomputed server-side.
+      if (req.method === 'POST' && url.pathname === '/api/reveal-doc') {
+        if (!existsSync(doc)) return J(res, 404, { ok: false, error: 'doc not found' });
+        try { revealInFileManager(doc); return J(res, 200, { ok: true, file: doc }); }
         catch (e) { return J(res, 500, { ok: false, error: String(e.message || e) }); }
       }
       // bundle all shareable files (review.html + sidecar + source .md + summaries)
