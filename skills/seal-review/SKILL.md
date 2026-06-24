@@ -85,11 +85,11 @@ shareability + owner status to stderr — **act on it**:
 
 | Command | Use |
 |---|---|
-| `init --in doc.md [--title T]` | Create `doc.seal.md` (state `in_review`); append `*.review.html` to `.gitignore`; render the page. Run once per doc. |
+| `init --in doc.md [--title T]` | Create `doc.seal.md` (state `draft`); append `*.review.html` to `.gitignore`; render the page. Run once per doc. |
 | `status --in doc.md [--json]` | Review state, open/resolved counts, and **anchor health** (which comments lost their quoted span). Start here. |
 | `comment --in doc.md --body B [--author A] [--anchor "exact span"] [--suggest "replacement"]` | File a comment. `--anchor` must be an **exact, unique** substring of the doc (copy it verbatim, including any markdown like `**bold**`); omit it for a document-level comment. `--suggest` (requires `--anchor`) records a proposed replacement, rendered as a del→ins diff. |
-| `reply --id ID --body B [--author A]` | Reply in a comment's thread. |
-| `resolve --id ID` / `reopen --id ID` | Toggle a comment's status. |
+| `reply --in doc.md --id ID --body B [--author A]` | Reply in a comment's thread. |
+| `resolve --in doc.md --id ID` / `reopen --in doc.md --id ID` | Toggle a comment's status. |
 | `submit --in doc.md` | Put the current version up for review (pins the version approvals bind to). Run before collecting approvals, and again after revising. |
 | `approve --in doc.md --approver A [--note N]` | Record an approval of the submitted version. Reaches `approved` at quorum (default 1) with no outstanding change-request. |
 | `request --in doc.md --approver A --note N` | Request changes on the submitted version (a current request vetoes `approved`). |
@@ -205,25 +205,24 @@ agent) are the loop** — the plugin gives you the surface and the events:
 
 1. **Launch the server as a BACKGROUND task** (so its output re-invokes you):
    `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs" serve --in doc.md --open`
-   Add `--mcp <list>` for the share channels you actually have connected (e.g.
-   `--mcp github,slack,email`), and notification flags if configured.
+   Add notification flags if configured.
 2. **React to `SEAL_EVENT` lines** the server prints on stdout. Each human action
    emits one. Handle them:
    - `summary_request {role}` → read the doc, write a role-tailored digest, then
      run `seal summary --in doc.md --role "<role>" --file <json>` (or pipe JSON on
      stdin). The page is polling and swaps it in — no refresh.
-   - `share_request {channels, to, file}` → use your **MCP tools** to share the
-     exported file/link (GitHub gist or PR comment, Slack post, email) to `to`.
    - `comment` / `suggestion` / `summary_request` are also your cue to triage,
      reply, or revise the doc and re-render.
 3. Keep the task running until the user is done; stop it when they say so.
 
-Because the work (generate summary, share, revise) is just you with the plugin's
-commands + your MCPs, the whole live loop is **self-contained in the plugin** — no
+Because the work (generate summary, revise) is just you with the plugin's
+commands, the whole live loop is **self-contained in the plugin** — no
 backend of ours. Notifications (Slack/Teams/email) are opt-in and need a webhook or
 key only if you turn them on. Pre-baked roles and all non-generative
 actions (comment, mention, status, render) work with **no agent in the loop**;
-only a *new typed role* and *MCP share* need you.
+only a *new typed role* needs you. To share a frozen review, use the page's
+**Share** dialog — download the self-contained bundle (.zip) or copy the
+ready-to-send note — or commit the sidecar (git is the transport).
 
 ### Live review + the AI-console bridge (`serve`)
 

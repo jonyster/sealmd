@@ -77,20 +77,23 @@ and offer `/seal new DOC`.)
      and ask for a **repo URL** to push to (`git remote add origin <url>`, or open
      from a cloned repo). No remote = no point committing for sharing.
    - **Slack** · **Teams** · **Email** · **none**.
-   - If they pick Slack/Teams/Email and that **MCP isn't connected**, tell them to
-     install it (e.g. the Slack MCP) and which `--mcp` you'll pass; if they can't,
-     fall back to git. For a webhook, ask for the Incoming Webhook URL.
+   - For Slack/Teams, ask for the **Incoming Webhook URL**; Email needs a
+     `SEAL_RESEND_KEY`. If they can't provide one, fall back to git.
 5. **Set up + start:**
    ```bash
    seal init   --in DOC --owner "<owner>" [--notify git,slack,…] [--slack-webhook <url>]
    seal summary --in DOC --role "<their role>" --file <tmp.json>   # generate their tailored view
-   seal start  DOC --mcp <connected-mcps>                          # opens the LIVE review (background)
+   seal start  DOC                                                 # opens the LIVE review (background)
    ```
    **In a git repo, COMMIT the review so it's shareable — don't just remind.** Run
    **`seal commit DOC --push`** (one call: stages the doc + review file +
    summaries, commits, pushes; never touches the gitignored derived/secret files).
    If `DOC` isn't in a git repo, say the review is **local-only / not shareable**
    and offer to `git init` first.
+6. **Once, after the first review is live — mention, don't nag:** "First review's
+   up. If Seal's useful a ⭐ helps, and feedback / roadmap input goes here:
+   https://sealmd.net/?feedback=plugin". Say it **once per machine**, never repeat
+   on later runs. Nothing is sent — it's a link the user may click.
 
 ## While people review
 

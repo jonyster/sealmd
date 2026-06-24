@@ -100,9 +100,13 @@ async function post(url, body, headers = {}) {
     return { ok: res.ok, status: res.status };
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 }
-export async function sendSlack(webhook, text) { return post(webhook, { text }); }
+// Neutralize Slack/Teams control syntax (`<!channel>`, `<@id>`, `<url|text>`) so a
+// reviewer's comment body can't @-ping a channel or impersonate. Channel-layer
+// (not formatEvent) so email keeps its own HTML escaping and Slack sees no &lt;.
+const noCtl = (s) => String(s || '').replace(/</g, '‹').replace(/>/g, '›');
+export async function sendSlack(webhook, text) { return post(webhook, { text: noCtl(text) }); }
 export async function sendTeams(webhook, text) {
-  return post(webhook, { '@type': 'MessageCard', '@context': 'http://schema.org/extensions', text });
+  return post(webhook, { '@type': 'MessageCard', '@context': 'http://schema.org/extensions', text: noCtl(text) });
 }
 // Escape for HTML text content (& first, so we don't double-escape the others).
 const escapeHtmlText = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

@@ -42,8 +42,12 @@ export function renderInline(text) {
     return token;
   });
   out = escapeHtml(out);
+  // Block REMOTE images — a live <img src=http…> would make the "self-contained,
+  // zero-network" page phone home on open. Allow only data:/relative sources.
   out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g,
-    (m, alt, src) => `<img src="${escapeHtml(safeUrl(src))}" alt="${alt}">`);
+    (m, alt, src) => /^https?:/i.test(src.trim())
+      ? `<span class="img-blocked" title="remote image not loaded (offline-safe)">🖼 ${alt || escapeHtml(src)}</span>`
+      : `<img src="${escapeHtml(safeUrl(src))}" alt="${alt}">`);
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g,
     (m, label, url) => `<a href="${escapeHtml(safeUrl(url))}">${label}</a>`);
   out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -374,7 +378,7 @@ const FAVICON_HREF = 'data:image/svg+xml;base64,' + Buffer.from(FAVICON_SVG).toS
 
 export function renderReviewPage({
   title, owner = null, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
-  curatedRoles = [], reviewerRole = '', people = [], mcp = [],
+  curatedRoles = [], reviewerRole = '', people = [],
   canCommit = false, gitRemote = null, autoCommit = false, dirty = false, canPR = false,
   mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static', token = '', generic = false,
 }) {
@@ -468,7 +472,6 @@ ${rolebar}
     summaries: roleMap, labels: roleLabels, defaultSlug, title: title || srcName, owner: owner || null,
     docPath, enginePath, srcName, mode, wordCount,
     people: Array.isArray(people) ? people : [],
-    mcp: Array.isArray(mcp) ? mcp : [],
     taxonomy: taxonomy.map((t) => ({ slug: t.slug, label: t.label })),
     canCommit, gitRemote, autoCommit, dirty, canPR, token,
   }).replace(/</g, '\\u003c');
@@ -817,15 +820,6 @@ ${rolebar}
   .copyblock{margin:8px 0;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--panel)}
   .copyblock .cbhd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 9px;font-size:11.5px;font-weight:600;color:var(--ink-soft);background:var(--fill);border-bottom:1px solid var(--line)}
   .copyblock textarea.copytext{width:100%;box-sizing:border-box;border:0;outline:none;resize:vertical;padding:9px 10px;font:inherit;font-size:12px;line-height:1.5;color:var(--ink);background:transparent;white-space:pre-wrap}
-  /* share dialog channels (legacy, unused) */
-  .sharechans{display:flex;flex-direction:column;gap:7px;margin:4px 0 10px}
-  .chanopt{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:var(--r-md);padding:9px 11px;cursor:pointer;font-size:13px}
-  .chanopt:hover{background:var(--panel-hover)}
-  .chanopt.on{border-color:var(--seal);background:var(--seal-soft)}
-  .chanopt input{accent-color:var(--seal);width:15px;height:15px}
-  .chanopt .ci{font-size:15px}
-  .sharerecip{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;outline:none;color:var(--ink);background:var(--input-fill);margin-bottom:10px}
-  .nomcp{font-size:12.5px;color:var(--muted);background:var(--panel);border:1px dashed var(--line-strong);border-radius:var(--r-md);padding:9px 11px;margin-bottom:10px;line-height:1.5}
   .sharedlg{position:fixed;inset:0;z-index:120;background:rgba(16,16,26,.4);display:flex;align-items:center;justify-content:center}
   .sharedlg[hidden]{display:none}
   .sharecard{background:var(--paper);border:1px solid var(--line-strong);border-radius:var(--r-lg);box-shadow:var(--shadow-pop);padding:18px 20px;width:440px;max-width:calc(100vw - 32px)}
@@ -1142,19 +1136,23 @@ renderPills(SEAL.defaultSlug);
 function cleanQuote(s){return String(s||'').replace(/[*_\`]/g,'').replace(/\\s+/g,' ').trim();}
 function anchorEl(anchor){if(!anchor||!page)return null;return page.querySelector('mark.cmt-hl[data-anchor="'+CSS.escape(anchor)+'"]');}
 function wrapFirst(root,quote,anchor){
+  // Exact-unique only. No truncation/fuzzy fallback: matching a prefix or the
+  // first of several occurrences silently mis-points the highlight at the wrong
+  // (sometimes contradictory) span while the engine reports the anchor healthy.
+  // 0 or >1 matches of the FULL cleaned quote -> no highlight, not a guess.
   var q=cleanQuote(quote);if(q.length<2)return null;
-  var tries=[q,q.slice(0,48),q.slice(0,24)];
-  var walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null),node;
+  var walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null),node,hit=null;
   while((node=walker.nextNode())){
     if(node.parentNode&&node.parentNode.closest&&node.parentNode.closest('mark.cmt-hl,pre,code'))continue;
-    var txt=node.nodeValue;if(!txt||txt.trim().length<1)continue;
-    for(var t=0;t<tries.length;t++){var needle=tries[t];if(needle.length<2)continue;
-      var idx=txt.indexOf(needle);if(idx<0)continue;
-      try{var range=document.createRange();range.setStart(node,idx);range.setEnd(node,Math.min(idx+needle.length,txt.length));
-        var mark=document.createElement('mark');mark.className='cmt-hl';if(anchor)mark.setAttribute('data-anchor',anchor);
-        range.surroundContents(mark);return mark;}catch(_){return null;}}
+    var txt=node.nodeValue;if(!txt)continue;
+    var idx=txt.indexOf(q);if(idx<0)continue;
+    if(hit||txt.indexOf(q,idx+1)>=0)return null;  // ambiguous -> bail
+    hit={node:node,idx:idx};
   }
-  return null;
+  if(!hit)return null;
+  try{var range=document.createRange();range.setStart(hit.node,hit.idx);range.setEnd(hit.node,Math.min(hit.idx+q.length,hit.node.nodeValue.length));
+    var mark=document.createElement('mark');mark.className='cmt-hl';if(anchor)mark.setAttribute('data-anchor',anchor);
+    range.surroundContents(mark);return mark;}catch(_){return null;}
 }
 function highlightAnchors(){
   if(!cardsEl||!page)return;

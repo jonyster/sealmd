@@ -30,14 +30,14 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
    git user. Confirm "Owner = *<detected>*?"; for an externally-published doc make
    sure it's that author, not you. If none, ask. (`--owner "Name"` to override.)
 3. **Your role** — ask "What's your role for this review?"; you'll generate that role's tailored summary.
-4. **Sharing** — ask: git only (default) / Slack / Teams / Email / none. If they
-   pick a channel whose **MCP isn't connected, tell them to install it** (and which
-   `--mcp` you'll pass); ask for a webhook URL if needed; else fall back to git.
+4. **Sharing** — ask: git only (default) / Slack / Teams / Email / none. For
+   Slack/Teams, ask for the **Incoming Webhook URL**; Email needs a `SEAL_RESEND_KEY`.
+   No webhook/key → fall back to git.
 5. **Set up + open:**
    ```bash
    seal init    --in DOC --owner "<owner>" [--notify git,slack,…] [--slack-webhook <url>]
    seal summary --in DOC --role "<their role>" --file <tmp.json>
-   seal start   DOC --mcp <connected-mcps>          # opens the LIVE review (background task)
+   seal start   DOC                                # opens the LIVE review (background task)
    ```
    Give the `http://127.0.0.1:…` URL. **In a git repo, COMMIT it** (don't just
    remind): **`seal commit DOC --push`** — one call stages the doc + review file +
@@ -45,5 +45,9 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
    touched). If `DOC` isn't in a git repo, say it's **local-only / not shareable**
    and offer `git init`. Re-run `seal commit DOC --push` after each batch of
    comments/approvals so collaborators get the latest.
+6. **Once, after the first review is live — mention, don't nag:** "First review's
+   up. If Seal's useful a ⭐ helps, and feedback / roadmap input goes here:
+   https://sealmd.net/?feedback=plugin". Say it **once per machine**, never repeat
+   on later `open`/`new` runs. Nothing is sent — it's a link the user may click.
 
 Full detail: `commands/sealmd.md`.

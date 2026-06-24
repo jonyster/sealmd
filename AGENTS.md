@@ -37,19 +37,18 @@ path where this repo is checked out.)
 | `approve / request --in doc.md --approver A [--note N]` | Record a sign-off / change request. |
 | `summary --in doc.md --role "Label" --file s.json` | Write a role-tailored summary (see live loop). |
 | `render --in doc.md [--open]` | (Re)generate the static review page. |
-| `start --in doc.md [--port N] [--open] [--mcp …]` | Init-if-needed **then** serve. Use this to launch — it never errors on a fresh doc. |
-| `serve --in doc.md [--port N] [--open] [--mcp github,slack,email] [--slack-webhook URL]` | **Live** loopback review server (requires an existing sidecar; prefer `start`). |
+| `start --in doc.md [--port N] [--open]` | Init-if-needed **then** serve. Use this to launch — it never errors on a fresh doc. |
+| `serve --in doc.md [--port N] [--open] [--slack-webhook URL]` | **Live** loopback review server (requires an existing sidecar; prefer `start`). |
 
 ## The live loop (agent-in-the-loop)
 
 When a human wants an interactive review, **you are the loop**:
 
 1. Launch the server **as a background process** so its output reaches you:
-   `node <repo>/skills/seal-review/scripts/seal.mjs start --in doc.md --open --mcp <your-connected-mcps>`
+   `node <repo>/skills/seal-review/scripts/seal.mjs start --in doc.md --open`
    (`start` = init-if-needed + serve; plain `serve` errors on a doc with no sidecar yet)
 2. Each human action prints one `SEAL_EVENT {…}` line on stdout. React:
    - `summary_request {role}` → write a role-tailored digest, run `seal summary --in doc.md --role "<role>" --file <json>`. The page polls and swaps it in.
-   - `share_request {channels,to,file}` → use your integrations (GitHub / Slack / email) to share the exported file to the recipients.
    - `comment` / `suggestion` / `accept` / `doc_edited` → triage, reply, or revise the doc and let it re-render.
 3. Stop the background process when the user is done.
 

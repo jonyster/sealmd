@@ -645,35 +645,6 @@ test('serve: /api/autocommit toggles the auto-commit flag reported by /api/state
   } finally { ws.cleanup(); }
 });
 
-test('serve: /api/share writes a portable static HTML file and reports a file:// url', async () => {
-  const ws = makeWorkspace({ git: true });
-  try {
-    runSeal(['init', '--in', ws.doc], { cwd: ws.dir });
-    await withServe(ws, [], async ({ base }) => {
-      const r = await jpost(base, '/api/share', { channels: [] });
-      assert.equal(r.json.ok, true);
-      assert.ok(ws.exists('doc.review.html'), 'static review file written');
-      assert.match(String(r.json.fileUrl), /^file:\/\//, 'file:// url reported');
-      assert.equal(r.json.dispatched, false, 'no channels -> nothing dispatched');
-      const html = ws.read('doc.review.html');
-      assert.match(html, /<html|<!doctype/i);
-    });
-  } finally { ws.cleanup(); }
-});
-
-test('serve: /api/share with channels emits a share_request event for the AI console', async () => {
-  const ws = makeWorkspace({ git: true });
-  try {
-    runSeal(['init', '--in', ws.doc], { cwd: ws.dir });
-    await withServe(ws, [], async ({ base, getStdout }) => {
-      const r = await jpost(base, '/api/share', { channels: ['slack'], to: ['#team'] });
-      assert.equal(r.json.dispatched, true);
-      await delay(50);
-      assert.match(getStdout(), /SEAL_EVENT .*"type":"share_request"/, 'share_request event emitted');
-    });
-  } finally { ws.cleanup(); }
-});
-
 test('serve: /api/closing reports commit status; local-only when there is no remote', async () => {
   const ws = makeWorkspace({ git: true });
   try {

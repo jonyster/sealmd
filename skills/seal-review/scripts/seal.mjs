@@ -226,6 +226,12 @@ function humanLine(kind, o) {
 function parseSidecar(text, sp) {
   const a = text.indexOf(BEGIN), b = text.indexOf(END);
   if (a === -1 || b === -1 || b < a) die(`sidecar ${sp} is missing its records region (${BEGIN} … ${END}) — refusing to touch it`);
+  // Guard against silent data loss: a second region, or a seal record sitting
+  // OUTSIDE the guard, would be dropped on the next rewrite. Refuse instead.
+  if (text.indexOf(BEGIN, a + BEGIN.length) !== -1 || text.indexOf(END, b + END.length) !== -1)
+    die(`sidecar ${sp}: multiple records regions — refusing to write. Keep one ${BEGIN} … ${END} block.`);
+  if (/```json seal:[a-z]+/.test(text.slice(0, a) + text.slice(b + END.length)))
+    die(`sidecar ${sp}: a seal record exists OUTSIDE the ${BEGIN}/${END} guard — refusing to write (it would be dropped). Move it inside the guard or remove it.`);
   const region = text.slice(a + BEGIN.length, b);
   const re = /```json seal:([a-z]+)\n([\s\S]*?)\n```/g;
   const records = { document: null, state: null, comments: [], approvals: [] };
@@ -316,6 +322,8 @@ function makeAnchor(normDoc, quote) {
     suffix = normDoc.slice(first + q.length, first + q.length + CTX);
     const probe = prefix + q + suffix;
     if (normDoc.indexOf(probe) !== normDoc.lastIndexOf(probe)) throw new Error('anchor is ambiguous (appears multiple times) — select a longer, unique span');
+    let n = 0; for (let i = normDoc.indexOf(q); i !== -1; i = normDoc.indexOf(q, i + 1)) n++;
+    console.error(`⚠ anchor "${q}" appears ${n}× — pinned the FIRST match via surrounding context. Pass a longer span to target another.`);
   }
   return { quote: q, prefix, suffix };
 }
@@ -341,13 +349,17 @@ function resolveAnchor(anchor, normDoc) {
 //   in_review    submitted, quorum not yet met, no current veto
 //   changes_requested  a current reviewer requested changes
 //   approved     >= quorum distinct current approvals, zero current vetoes
+// One human = one vote. Key identity case/whitespace-insensitively so "alice"
+// and "alice " can't both count toward quorum.
+const normId = (s) => String(s || '').trim().toLowerCase();
 function latestPerReviewer(approvals, stateHash) {
   // keep only decisions bound to the submitted version, latest per approver
   const current = approvals.filter((a) => a.content_hash === stateHash);
   const byReviewer = new Map();
   for (const a of current) {
-    const prev = byReviewer.get(a.approver);
-    if (!prev || a.created_at > prev.created_at) byReviewer.set(a.approver, a);
+    const key = normId(a.approver);
+    const prev = byReviewer.get(key);
+    if (!prev || a.created_at > prev.created_at) byReviewer.set(key, a);
   }
   return [...byReviewer.values()];
 }
@@ -432,9 +444,6 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   const peopleDir = readPeople(doc);
   const people = Object.keys(peopleDir).filter((k) => !k.startsWith('_'))
     .map((name) => ({ name, handle: peopleDir[name].handle || name, email: peopleDir[name].email || null }));
-  // Share channels are gated on available MCP integrations — the agent passes
-  // `--mcp github,slack,email` (the MCPs it has) when launching serve.
-  const mcp = (arg('mcp') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   // Resolve the repo regardless of mode so the filename can link to GitHub even in a
   // static export (commit/PR controls stay serve-gated via the mode-restricted `git`).
   const gitAll = gitInfo(dirname(doc));
@@ -447,7 +456,7 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   return renderReviewPage({
     title: r.document.title, owner: r.document.owner || null, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
-    people, mcp, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
+    people, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
     canPR: git.inRepo && !!git.remote && ghReady(),
     mdRaw: md, contentHash: ch, wordCount, comments, review, mode, token, generic: genericSummary,
     renderedAt: 'rendered ' + nowISO(),
@@ -715,7 +724,7 @@ function coreDecision(doc, { decision, approver, note }) {
   if (live !== r.state.content_hash) throw new Error('doc has changed since submit — submit again before approving');
   if (!approver) throw new Error('approver is required');
   if (decision === 'changes_requested' && !note) throw new Error('a note is required when requesting changes');
-  r.approvals = r.approvals.filter((a) => !(a.approver === approver && a.content_hash === r.state.content_hash));
+  r.approvals = r.approvals.filter((a) => !(normId(a.approver) === normId(approver) && a.content_hash === r.state.content_hash));
   const ap = { kind: 'approval', id: rid('a'), approver, decision, content_hash: r.state.content_hash, note: note || null, created_at: nowISO() };
   r.approvals.push(ap);
   r.state = { ...r.state, status: deriveStatus(r), updated_at: nowISO() };
@@ -1137,21 +1146,6 @@ function cmdServe() {
       }
       // export a portable, self-contained static review file to share (the
       // loopback URL only works on this machine; the HTML file does not).
-      if (req.method === 'POST' && url.pathname === '/api/share') {
-        const sbody = await readBody(req);
-        const { r } = loadSidecar(doc);
-        const outFile = htmlPath(doc);
-        writeFileSync(outFile, buildPage(doc, r, { mode: 'static' }), 'utf8');
-        let absUrl = outFile, absPath = outFile;
-        try { absPath = realpathSync(outFile); absUrl = pathToFileURL(absPath).href; } catch {}
-        const channels = Array.isArray(sbody.channels) ? sbody.channels : [];
-        if (channels.length) {
-          // hand off to the AI console's MCP integrations (github/slack/email)
-          emitEvent({ type: 'share_request', channels, to: sbody.to || [], file: outFile, fileUrl: absUrl, doc, title: r.document.title,
-            hint: 'share the review file/link via the requested MCP(s) (GitHub gist/PR comment, Slack post, email) to the recipients' });
-        }
-        return J(res, 200, { ok: true, file: outFile, absPath, fileUrl: absUrl, channels, dispatched: channels.length > 0 });
-      }
       // reveal the exported review file in the OS file manager (Finder/Explorer).
       // Path is recomputed server-side — never taken from the client.
       if (req.method === 'POST' && url.pathname === '/api/reveal') {

@@ -665,13 +665,13 @@ test('sendSlack: only JSON.stringify protects transit — raw markup reaches bod
     return { ok: true, status: 200 };
   });
   try {
-    const text = formatEvent({ type: 'comment', author: 'A', doc: 'd.md', body: '<script>x</script> & y' });
+    const text = formatEvent({ type: 'comment', author: 'A', doc: 'd.md', body: '<!channel> <script>x</script> & y' });
     await sendSlack('https://hooks/x', text);
-    // Wire bytes are valid JSON (stringify escaped quotes/controls)…
     const parsed = JSON.parse(calls[0].opts.body);
-    // …but the decoded text.text still carries the raw, un-HTML-escaped markup.
-    assert.equal(parsed.text, text);
-    assert.match(parsed.text, /<script>x<\/script> & y/);
+    // Slack control syntax neutralized (no <!channel> ping / <@id> spoof), but
+    // not HTML-escaped — Slack mrkdwn, so & stays literal, no &lt;.
+    assert.doesNotMatch(parsed.text, /<|>/, 'angle brackets gone');
+    assert.match(parsed.text, /‹!channel› ‹script›x‹\/script› & y/);
     assert.doesNotMatch(parsed.text, /&lt;|&amp;/);
   } finally {
     fetchMock.mock.restore();
@@ -688,9 +688,10 @@ test('sendTeams: raw markup reaches MessageCard text after JSON transit', async 
     const text = formatEvent({ type: 'comment', author: 'A', doc: 'd.md', body: '<img src=x> & z' });
     await sendTeams('https://teams/x', text);
     const parsed = JSON.parse(calls[0].opts.body);
-    assert.equal(parsed.text, text);
-    assert.match(parsed.text, /<img src=x> & z/);
-    assert.doesNotMatch(parsed.text, /&lt;|&amp;/);
+    // angle brackets neutralized (no Slack/Teams control-syntax injection) but
+    // not HTML-escaped — a card is markdown, so & stays literal.
+    assert.match(parsed.text, /‹img src=x› & z/);
+    assert.doesNotMatch(parsed.text, /<|>|&lt;|&amp;/);
   } finally {
     fetchMock.mock.restore();
   }

@@ -3,7 +3,7 @@
 //
 // Covers:
 //   - CLI `seal commit` (stage/commit/push, no-op, non-repo, ignore-list, remote)
-//   - `serve` HTTP endpoints: GET /, POST /api/commit, /api/share, /api/autocommit
+//   - `serve` HTTP endpoints: GET /, POST /api/commit, /api/bundle, /api/autocommit
 //
 // Node built-in runner only. Zero third-party deps. Deterministic, no network
 // beyond loopback. Imports the shared harness; never edits it.
@@ -306,35 +306,6 @@ test('serve: POST /api/commit commits and emits committed event', async () => {
     // and the commit really exists
     const subject = git(ws.dir, ['log', '-1', '--pretty=%s']);
     assert.match(subject, /seal: review/);
-  } finally {
-    await srv.stop();
-    ws.cleanup();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// 9. POST /api/share writes the portable html + emits a 'share_request' event.
-// ---------------------------------------------------------------------------
-test('serve: POST /api/share writes static html and emits share_request (github)', async () => {
-  const ws = makeWorkspace({ git: true });
-  runSeal(['init', '--in', ws.doc], { cwd: ws.dir });
-  const port = nextPort();
-  const srv = startServer({ cwd: ws.dir, doc: ws.doc, port });
-  try {
-    await srv.ready;
-    const { status, json } = await postJSON(port, '/api/share', { channels: ['github'] });
-    assert.equal(status, 200);
-    assert.equal(json.ok, true);
-    assert.ok(json.file, 'response carries the portable file path');
-    assert.ok(existsSync(json.file), 'the portable static html file exists on disk');
-    assert.deepEqual(json.channels, ['github']);
-    assert.equal(json.dispatched, true);
-
-    const ev = await srv.waitForEvent('share_request');
-    assert.ok(ev, 'a share_request SEAL_EVENT should be emitted');
-    assert.ok(ev.channels.includes('github'), 'event channels include github');
-    assert.ok(ev.file, 'event carries the file path the console will share');
-    assert.match(ev.hint, /MCP/i, 'hint tells the AI console to share via the MCP integration');
   } finally {
     await srv.stop();
     ws.cleanup();
