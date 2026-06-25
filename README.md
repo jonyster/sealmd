@@ -2,9 +2,9 @@
 
 # ◆ &nbsp;sealmd
 
-### Your agent wrote the doc. Where did the review go?
+### Get the right people to actually review what your agent wrote.
 
-*sealmd turns an agent-written Markdown doc into a sign-off-ready review that lives next to it in your repo — two committed files, so the right humans actually read and approve it.*
+*Point sealmd at any agent-written Markdown doc — PRD, spec, RFC, contract — and it becomes a clean review page right in your repo. Each reviewer gets an AI summary written for their role, jumps to the slice that's theirs, comments, and approves — and your git stays the source of truth, with approved changes committing straight back. No copy-paste, no chasing sign-off in Slack.*
 
 <br>
 
@@ -28,12 +28,12 @@
 
 Your agent writes a PRD, a spec, an RFC. Then a human has to **actually approve it** — and a 6,000-word doc nobody reads is a rubber stamp, not a review.
 
-**sealmd** makes that review real, without a SaaS or an account:
+**sealmd** makes that review real, without a SaaS or an account — and **your git stays the source of truth**:
 
 - **A doc, not a dashboard** — a calm, paper-feeling page a busy reviewer reads in minutes.
 - **~90-second summary your agent tailors to each reviewer's role** — Compliance sees compliance, Eng sees architecture (a generic one renders if you skip it).
-- **Comment & suggest right on the text** — select a span, leave a note or a proposed edit.
-- **Content-bound decisions** — approvals bind to the doc's content hash and go **stale** the next time the review is rendered after the text changes.
+- **Comment & suggest right on the text** — select a span, leave a note or a proposed edit; **Accept** commits the change straight back.
+- **Content-bound decisions** — approvals bind to the doc's content hash and go **stale** the moment the text changes.
 - **No lock-in** — it's two Markdown files in your repo. Diff them, commit them, own them.
 
 > The local tier is **honest, not cryptographic**: authors are self-asserted and the sidecar is editable text — `git diff` and git history are the audit trail. Verified identity + a hosted shared link are the paid `seal publish` step. Everything else is right here, free.
