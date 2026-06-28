@@ -537,6 +537,11 @@ export function renderReviewPage({
   .badge.amber{color:var(--amber);background:var(--amber-soft);border-color:#e7d3b0}
   .badge.seal{color:var(--seal);background:var(--seal-soft);border-color:var(--seal-line)}
   /* mode banner (underline view tabs) */
+  .sharenudge{display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:12.5px;
+    border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--seal) 14%,var(--panel-2));color:var(--ink-soft);position:relative;z-index:47}
+  .sharenudge[hidden]{display:none}
+  .sharenudge .sn-txt{flex:1;min-width:0}
+  .sharenudge .sn-x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px}
   .modebanner{font-size:12px;padding:0 10px;display:flex;align-items:center;gap:4px;
     border-bottom:1px solid var(--line);background:var(--panel-2);color:var(--muted);position:relative;z-index:46}
   .modebanner b{color:var(--ink-soft);font-weight:500}
@@ -875,6 +880,11 @@ export function renderReviewPage({
       <span style="margin-left:2px">${escapeHtml(defaultLabel)} view</span>
     </div>
   </header>
+  ${(mode === 'serve' && gitRemote && canCommit) ? `<div class="sharenudge" id="shareNudge"${(dirty && !autoCommit) ? '' : ' hidden'}>
+    <span class="sn-txt"><b>Your comments aren't shared yet</b> — saved on this machine but not pushed. Reviewers won't see them until you do.</span>
+    <button class="btn primary tiny" id="nudgeCommit">↗ Commit &amp; push</button>
+    <button class="sn-x" id="nudgeDismiss" type="button" aria-label="Dismiss">&times;</button>
+  </div>` : ''}
   <div class="modebanner" id="modeBanner">
     <div class="seg" id="viewSeg">
       <button data-view="summary" class="on">Summary</button>
@@ -1458,7 +1468,7 @@ function renderShare(){
     const next=autoPush.checked;
     autoPush.disabled=true;if(autoPushLbl)autoPushLbl.setAttribute('aria-disabled','true');
     try{const j=await(await fetch('/api/autocommit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({on:next})})).json();
-      if(j&&j.ok){SEAL.autoCommit=j.auto_commit;autoPush.checked=j.auto_commit;toast(j.auto_commit?'Auto push on — sidecar pushed after each change':'Auto push off');}
+      if(j&&j.ok){SEAL.autoCommit=j.auto_commit;autoPush.checked=j.auto_commit;if(j.auto_commit){const sn=document.getElementById('shareNudge');if(sn)sn.hidden=true;}toast(j.auto_commit?'Auto push on — sidecar pushed after each change':'Auto push off');}
       else{autoPush.checked=!next;toast('Error: '+((j&&j.error)||'failed'));}}
     catch(e){autoPush.checked=!next;toast('Error: '+e.message);}
     finally{autoPush.disabled=false;if(autoPushLbl)autoPushLbl.removeAttribute('aria-disabled');}
@@ -1531,6 +1541,15 @@ async function doCommit(loud){
     else if(loud)toast('Error: '+(j.error||'commit failed'));}
   catch(e){if(loud)toast('Commit error: '+e.message);}
   if(cg){cg.disabled=false;cg.textContent='Commit & push now';}
+}
+// "Your comments aren't shared yet" nudge — commit & push inline, or dismiss
+// for this load (reappears after the next comment, since the page reloads dirty).
+const shareNudge=document.getElementById('shareNudge');
+if(shareNudge){
+  const nc=document.getElementById('nudgeCommit');
+  if(nc)nc.onclick=async()=>{nc.disabled=true;nc.textContent='Pushing…';await doCommit(true);if(!SEAL.dirty)shareNudge.hidden=true;nc.disabled=false;nc.innerHTML='↗ Commit &amp; push';};
+  const nd=document.getElementById('nudgeDismiss');
+  if(nd)nd.onclick=()=>{shareNudge.hidden=true;};
 }
 // "Add a repo to share" — repo has no remote, so committing wouldn't share anything
 const needRemote=document.getElementById('needRemote');

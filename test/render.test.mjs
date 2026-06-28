@@ -362,6 +362,17 @@ test('renderReviewPage returns a self-contained HTML document', () => {
   assert.ok(!/<script[^>]+src=["']https?:/i.test(html));
 });
 
+test('share nudge shows only when serve + remote + dirty + not auto-committing', () => {
+  const o = { mode: 'serve', gitRemote: 'git@x', canCommit: true };
+  const visible = (h) => /id="shareNudge"(?![^>]*\bhidden\b)/.test(h);
+  const present = (h) => /id="shareNudge"/.test(h);
+  assert.ok(visible(renderReviewPage(minimalOpts({ ...o, dirty: true, autoCommit: false }))), 'dirty → visible');
+  assert.ok(!visible(renderReviewPage(minimalOpts({ ...o, dirty: false }))), 'clean → hidden');
+  assert.ok(!visible(renderReviewPage(minimalOpts({ ...o, dirty: true, autoCommit: true }))), 'auto-commit → hidden');
+  assert.ok(!present(renderReviewPage(minimalOpts({ ...o, mode: 'static', dirty: true }))), 'static → absent');
+  assert.ok(!present(renderReviewPage(minimalOpts({ mode: 'serve', gitRemote: null, canCommit: true, dirty: true }))), 'no remote → absent');
+});
+
 test('renderReviewPage embeds the title and the content hash', () => {
   const html = renderReviewPage(minimalOpts());
   assert.ok(html.includes('My Spec'));
