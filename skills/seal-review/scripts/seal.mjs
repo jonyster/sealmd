@@ -134,6 +134,33 @@ export function findRole(roles, name) {
     || roles.find((r) => { const rl = (r.role || '').toLowerCase(); return rl && (rl.includes(n) || n.includes(rl.split(/[ (]/)[0])); })
     || null;
 }
+// Which reviewer ROLE owns a section heading? Scans each role's summary relevant_sections
+// (entries are heading strings or { section } objects) for a label matching `heading`.
+// This is how `seal pull` routes an inbound PR comment to the responsible role — the local
+// echo of hosted's section→role mapping. Returns the role name or null.
+export function roleForSection(roles, heading) {
+  if (!heading) return null;
+  const h = heading.trim().toLowerCase();
+  const label = (s) => String(typeof s === 'string' ? s : (s.section || s.label || '')).trim().toLowerCase();
+  // Exact heading match first — avoids "Overview" routing on "Cost Overview" / "Overview of X".
+  for (const r of roles || []) for (const s of (r.relevant_sections || r.sections || [])) if (label(s) === h) return r.role || null;
+  // Then containment, as a looser fallback.
+  for (const r of roles || []) for (const s of (r.relevant_sections || r.sections || [])) { const l = label(s); if (l && (l.includes(h) || h.includes(l))) return r.role || null; }
+  return null;
+}
+// A person in the people directory whose `role` (or reviewer_role) matches `role` — so we can
+// mention them BY EMAIL. people.json entries are free-form, so a curated `role` field is the
+// bridge the plugin otherwise lacks. Returns { name, email } or null.
+export function personForRole(people, role) {
+  if (!role) return null;
+  const want = role.trim().toLowerCase();
+  for (const [name, v] of Object.entries(people || {})) {
+    if (name.startsWith('_') || !v || typeof v !== 'object') continue;
+    const pr = String(v.role || v.reviewer_role || '').trim().toLowerCase();
+    if (pr && (pr === want || pr.includes(want) || want.includes(pr))) return { name, email: v.email || null };
+  }
+  return null;
+}
 // ---- people directory + notification prefs --------------------------------
 function peopleFilePath(doc) { return doc.replace(/\.md$/i, '') + '.seal.people.json'; }
 function readPeople(doc) {
@@ -195,7 +222,7 @@ function upsertSummaryRole(doc, roleObj) {
 const KEY_ORDER = {
   document: ['kind', 'seal_schema_version', 'normalization_version', 'source', 'title', 'owner', 'notify', 'created_at'],
   state: ['kind', 'status', 'content_hash', 'updated_at'],
-  comment: ['kind', 'id', 'author', 'anchor', 'suggestion', 'accepted', 'mentions', 'body', 'status', 'content_hash', 'created_at', 'thread'],
+  comment: ['kind', 'id', 'author', 'anchor', 'suggestion', 'accepted', 'mentions', 'body', 'status', 'content_hash', 'created_at', 'thread', 'origin', 'external_ref'],
 };
 function canon(kind, obj) {
   const order = KEY_ORDER[kind];
@@ -573,7 +600,9 @@ function cmdStart() {
 // goes through the exact same fail-loud sidecar logic the CLI uses.
 function findComment(r, id) { const cm = r.comments.find((x) => x.id === id); if (!cm) throw new Error(`no comment with id ${id}`); return cm; }
 
-function coreComment(doc, { author, body, anchor, suggestion, mention }) {
+// `externalRef` + `origin` tag a comment that came FROM an external system (the GitHub PR,
+// via `seal pull`) so re-pulls dedupe and the outbound mirror skips it (no echo back).
+function coreComment(doc, { author, body, anchor, suggestion, mention, externalRef, origin }) {
   if (!body) throw new Error('body is required');
   const { sp, r } = loadSidecar(doc);
   const md = normalizeMarkdown(readDoc(doc));
@@ -585,20 +614,24 @@ function coreComment(doc, { author, body, anchor, suggestion, mention }) {
     kind: 'comment', id: rid('c'), author: author || gitUser(dirname(doc)) || 'anonymous',
     anchor: anchor ? makeAnchor(md, anchor) : null,
     suggestion: suggestion != null ? suggestion : undefined,
-    mentions: mentions.length ? mentions.map((m) => ({ name: m.name, handle: m.handle })) : undefined,
+    mentions: mentions.length ? mentions.map((m) => ({ name: m.name, handle: m.handle, email: m.email || undefined })) : undefined,
     body,
     status: 'open', content_hash: contentHash(md), created_at: nowISO(), thread: [],
+    origin: origin || undefined,
+    external_ref: externalRef || undefined,
   };
   r.comments.push(cm);
   writeSidecar(sp, r);
   return { cm, sp, r, mentions };
 }
-function coreReply(doc, { id, author, body }) {
+function coreReply(doc, { id, author, body, externalRef }) {
   if (!id) throw new Error('id is required');
   if (!body) throw new Error('body is required');
   const { sp, r } = loadSidecar(doc);
   const cm = findComment(r, id);
-  cm.thread.push({ author: author || gitUser(dirname(doc)) || 'anonymous', body, created_at: nowISO() });
+  // external_ref pins a GitHub reply id so a re-pull dedupes it (thread entries are serialized
+  // whole, so the extra field persists without a KEY_ORDER entry).
+  cm.thread.push({ author: author || gitUser(dirname(doc)) || 'anonymous', body, created_at: nowISO(), external_ref: externalRef || undefined });
   writeSidecar(sp, r);
   return { cm, sp, r };
 }
@@ -790,7 +823,9 @@ function corePostReviewComments(doc, git, { prUrl, head, base }) {
   const ghApi = (args, input) => execFileSync(GHB, ['api', ...args], { cwd: git.root, encoding: 'utf8', input, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   const ghJSON = (path) => { try { return JSON.parse(ghApi([path, '--paginate']) || '[]'); } catch { return []; } };
 
-  const open = loadSidecar(doc).r.comments.filter((c) => (c.status || 'open') === 'open');
+  // Skip comments that came FROM GitHub (origin==='github', via `seal pull`) — re-posting
+  // them would echo a reviewer's own PR comment back onto the PR.
+  const open = loadSidecar(doc).r.comments.filter((c) => (c.status || 'open') === 'open' && c.origin !== 'github');
   if (!open.length) return { inline: 0, summary: 0, skipped: 0 };
 
   const docText = readDoc(doc);
@@ -893,6 +928,119 @@ function cmdPR() {
   const doc = docPath();
   const r = corePR(doc, { title: arg('title'), body: arg('body'), branch: arg('branch') });
   out({ ok: true, action: 'pr', ...r, push_error: r.pushError });
+}
+
+// Inbound half of two-way GitHub sync (Phase 2): pull NEW comments from the doc's PR back
+// into the sidecar. Skips Seal's OWN posted comments (seal:c= / seal:pr-comments markers) and
+// anything already imported (external_ref `gh:<id>`). Each import is anchored to the quoted
+// line, names the GitHub author + section in the body, and mentions the doc OWNER — the local
+// notify target. (The plugin has no role→person map, so the hosted "tag the section's role
+// reviewer" degrades to the owner here; section-reviewer routing is a sealmd.net feature.)
+function corePull(doc, { prUrl } = {}) {
+  const git = gitInfo(dirname(doc));
+  if (!git.inRepo) throw new Error('not a git repo — run `git init` first');
+  const GHB = ghBin();
+  if (!GHB || !ghReady()) throw new Error('GitHub CLI not ready — install `gh` and run `gh auth login`');
+  const repo = (() => { try { return execFileSync(GHB, ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], { cwd: git.root, encoding: 'utf8' }).trim(); } catch { return null; } })();
+  let url = prUrl;
+  if (!url) { try { url = execFileSync(GHB, ['pr', 'view', '--json', 'url', '-q', '.url'], { cwd: git.root, encoding: 'utf8' }).trim(); } catch { /* no PR for branch */ } }
+  const n = (url && (url.match(/\/pull\/(\d+)/) || [])[1]) || null;
+  if (!repo || !n) throw new Error('no PR found for this branch — open one with `seal pr` first (or pass --pr <url>)');
+
+  const ghApi = (args) => execFileSync(GHB, ['api', ...args], { cwd: git.root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  const ghJSON = (p) => { try { return JSON.parse(ghApi([p, '--paginate']) || '[]'); } catch { return []; } };
+
+  const { r } = loadSidecar(doc);
+  const owner = r.document.owner || null;
+  const roles = readSummaryRoles(doc);   // role → relevant_sections, for section→role routing
+  const people = readPeople(doc);         // name → { handle, email, role? }, for role→person email
+  const rel = (() => { try { return relative(git.root, realpathSync(doc)); } catch { return basename(doc); } })().split('\\').join('/');
+  // A PR comment's line indexes the doc AT THE PR HEAD COMMIT, which can differ from the working
+  // tree. Read the head version of the file for the quote/section the reviewer actually saw, then
+  // anchor that quote into the CURRENT doc (coreComment) — if it still exists it anchors, else it
+  // degrades to doc-level. Fall back to the working tree if the head blob can't be read.
+  const G = (args) => execFileSync('git', args, { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  let docLines;
+  try {
+    const headSha = execFileSync(GHB, ['pr', 'view', n, '--json', 'headRefOid', '-q', '.headRefOid'], { cwd: git.root, encoding: 'utf8' }).trim();
+    docLines = G(['show', `${headSha}:${rel}`]).split('\n');
+  } catch { docLines = readDoc(doc).split('\n'); }
+  // Dedup across roots AND thread replies; ext→root-id lets a GitHub reply thread under its parent.
+  const have = new Set();
+  const extToId = new Map();
+  for (const c of r.comments) {
+    if (c.external_ref) { have.add(c.external_ref); extToId.set(c.external_ref, c.id); }
+    for (const t of (c.thread || [])) if (t.external_ref) have.add(t.external_ref);
+  }
+  const isOurs = (b) => /seal:c=|seal:pr-comments/.test(b || '');
+  // Nearest heading at or above a 1-based line — used to name the section in the imported body.
+  const sectionFor = (ln) => {
+    for (let i = Math.min(ln, docLines.length) - 1; i >= 0; i--) {
+      const m = (docLines[i] || '').match(/^#{1,6}\s+(.+?)\s*#*$/);
+      if (m) return m[1].trim();
+    }
+    return null;
+  };
+
+  let imported = 0, skipped = 0;
+  const add = (ghId, login, text, ln, inReplyTo) => {
+    const ext = `gh:${ghId}`;
+    if (have.has(ext)) { skipped++; return; }
+    if (!String(text || '').trim()) { skipped++; return; }
+    // A GitHub reply threads under the parent we already mirrored — no re-anchor, no re-route.
+    const parentId = inReplyTo ? extToId.get(`gh:${inReplyTo}`) : null;
+    if (parentId) {
+      coreReply(doc, { id: parentId, author: login, body: `**@${login}** replied on the GitHub PR:\n\n${text}`, externalRef: ext });
+      have.add(ext); imported++;
+      return;
+    }
+    const lt = ln ? String(docLines[ln - 1] || '').trim() : '';
+    const sec = ln ? sectionFor(ln) : null;
+    // Route to the section's reviewer: section → role (from the summaries) → a person with that
+    // role (mentioned by email). Fall back to the doc owner. Name both role + section in the body.
+    const role = roleForSection(roles, sec);
+    const person = personForRole(people, role);
+    const mentionTarget = person ? person.name : (owner || null);
+    const forWhom = role ? ` — for the **${role}** reviewer` : '';
+    const body = `**@${login}** on the GitHub PR${forWhom}${sec ? ` (§ ${sec})` : ''}:\n\n${text}`;
+    const opts = { author: login, body, mention: mentionTarget ? [mentionTarget] : [], externalRef: ext, origin: 'github' };
+    // makeAnchor throws if the line isn't found verbatim or is ambiguous in the (possibly
+    // changed) doc — degrade to a doc-level comment rather than failing the whole pull.
+    let cm;
+    try { ({ cm } = coreComment(doc, { ...opts, anchor: lt || undefined })); }
+    catch { ({ cm } = coreComment(doc, { ...opts, anchor: undefined })); }
+    extToId.set(ext, cm.id); have.add(ext); imported++;
+  };
+
+  // Inline review comments (anchored to a line of OUR doc); then general PR comments (doc-level).
+  // Roots before replies so a reply's parent is already in extToId.
+  const review = ghJSON(`repos/${repo}/pulls/${n}/comments`).filter((c) => !isOurs(c.body) && (!c.path || c.path.split('\\').join('/') === rel));
+  const issue = ghJSON(`repos/${repo}/issues/${n}/comments`).filter((c) => !isOurs(c.body));
+  // Every external_ref still present on the PR — anything we imported but that's now absent was
+  // deleted on GitHub.
+  const present = new Set([...review, ...issue].map((c) => `gh:${c.id}`));
+  for (const c of review.filter((c) => c.in_reply_to_id == null)) add(c.id, c.user?.login || 'unknown', c.body || '', c.line ?? c.original_line ?? null, null);
+  for (const c of review.filter((c) => c.in_reply_to_id != null)) add(c.id, c.user?.login || 'unknown', c.body || '', c.line ?? c.original_line ?? null, c.in_reply_to_id);
+  for (const c of issue) add(c.id, c.user?.login || 'unknown', c.body || '', null, null);
+
+  // Archive (resolve) previously-imported ROOT comments deleted on GitHub. Never hard-delete —
+  // matches Seal's never-delete rule. ponytail: thread-reply deletes + body edits don't sync in
+  // the plugin's pull model (hosted gets both via webhooks); a stale body is the known trade-off.
+  let resolved = 0;
+  const { r: r2 } = loadSidecar(doc);
+  for (const c of r2.comments) {
+    if (c.origin === 'github' && c.external_ref && !present.has(c.external_ref) && (c.status || 'open') === 'open') {
+      coreSetStatus(doc, { id: c.id, status: 'resolved' }); resolved++;
+    }
+  }
+  const { r: r3 } = loadSidecar(doc); // reload after any resolves for render
+  return { url, repo, pr: Number(n), imported, skipped, resolved, r: r3 };
+}
+function cmdPull() {
+  const doc = docPath();
+  const r = corePull(doc, { prUrl: arg('pr') });
+  const html = regen(doc, r.r); maybeOpen(html);
+  out({ ok: true, action: 'pull', url: r.url, pr: r.pr, imported: r.imported, skipped: r.skipped, resolved: r.resolved, html });
 }
 
 // Role summaries the live page requested but that don't exist yet. The agent
@@ -1240,6 +1388,8 @@ Usage: node seal.mjs <command> --in <doc.md> [opts]
   summary   write a role-tailored summary  --role "Label" [--file j.json | --json '…' | stdin]
   pending   list role summaries the live page requested but that don't exist yet  [--json]
   commit    stage + commit the review (doc + .seal.md + summaries) to git  [-m "msg"] [--push]
+  pr        open/reuse a GitHub PR for the review + mirror the comments onto it
+  pull      pull NEW comments from the PR back into the review  [--pr URL]
   hash      print bare-hex content hash
   doctor    validate the sidecar (read-only)               [--json]
 
@@ -1268,6 +1418,7 @@ function run() {
       case 'pending': cmdPending(); break;
       case 'commit': cmdCommit(); break;
       case 'pr': cmdPR(); break;
+      case 'pull': cmdPull(); break;
       case 'hash': cmdHash(); break;
       case 'blocks': cmdBlocks(); break;
       case 'doctor': cmdDoctor(); break;
