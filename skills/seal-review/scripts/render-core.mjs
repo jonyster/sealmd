@@ -394,10 +394,12 @@ export function renderReviewPage({
   // ---- role data: key everything by slug(label) -----------------------------
   const roleMap = {};   // slug -> ready inner html
   const roleLabels = {}; // slug -> human label
+  const roleHashes = {}; // slug -> the doc hash the summary was written for (drift)
   for (const r of roles) {
     const slug = slugifyRole(r.role) || 'general';
     roleMap[slug] = summaryReadyInner(r, wordCount, isGeneric);
     roleLabels[slug] = r.role;
+    roleHashes[slug] = r.source_hash || null;
   }
   const defaultLabel = reviewerRole || roles[0].role;
   const defaultSlug = slugifyRole(defaultLabel) || slugifyRole(roles[0].role) || 'general';
@@ -459,8 +461,8 @@ export function renderReviewPage({
 
   // ---- client data ----------------------------------------------------------
   const SEAL_JS_DATA = JSON.stringify({
-    summaries: roleMap, labels: roleLabels, defaultSlug, title: title || srcName, owner: owner || null,
-    docPath, enginePath, srcName, mode, wordCount,
+    summaries: roleMap, labels: roleLabels, summaryHashes: roleHashes, defaultSlug, title: title || srcName, owner: owner || null,
+    docPath, enginePath, srcName, mode, wordCount, contentHash,
     people: Array.isArray(people) ? people : [],
     taxonomy: taxonomy.map((t) => ({ slug: t.slug, label: t.label })),
     canCommit, gitRemote, autoCommit, dirty, unshared, canPR, token,
@@ -703,6 +705,7 @@ export function renderReviewPage({
   #cmtAuthor:focus{border-color:var(--seal)}
   .cmt-summary-hint{margin-top:7px;font-size:11.5px;line-height:1.45;color:var(--muted)}
   .linkbtn{border:0;background:none;padding:0;font:inherit;color:var(--seal);cursor:pointer;text-decoration:underline}
+  .sumstale{margin:10px 0 4px;padding:9px 12px;font-size:12.5px;line-height:1.45;color:var(--ink-soft);background:color-mix(in srgb,#d9a800 16%,var(--paper));border:1px solid color-mix(in srgb,#d9a800 40%,var(--line));border-radius:var(--r-sm)}
   .cmt-summary-hint .linkbtn{font-size:inherit}
   /* once a passage is pinned the comment is already anchored — drop the hint */
   .cmt-compose:has(.cmt-quote:not([hidden])) .cmt-summary-hint{display:none}
@@ -1049,7 +1052,27 @@ function applyRole(slug){
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[slug]||'';
   pick.parentNode.appendChild(wrap);
   setActiveRole(slug,labelFor(slug));
+  placeStale(pick,slug);
   try{sessionStorage.setItem('seal-role',slug)}catch(e){}
+}
+// Drift badge: a brief whose source_hash != the live doc hash (older doc version).
+// Re-injected per role switch (clearAfterPicker wipes prior siblings). serve only.
+function isStale(slug){const h=SEAL.summaryHashes&&SEAL.summaryHashes[slug];return !!(h&&SEAL.contentHash&&h!==SEAL.contentHash);}
+function placeStale(pick,slug){
+  var ex=document.getElementById('sumStale');if(ex)ex.remove();
+  if(SEAL.mode!=='serve'||!isStale(slug)||!pick)return;
+  var d=document.createElement('div');d.className='sumstale';d.id='sumStale';
+  d.innerHTML='⚠ This brief reflects an earlier version of the doc — it has changed since. <button type="button" class="linkbtn" id="sumUpdate">Update now</button>';
+  pick.after(d);
+  var btn=d.querySelector('#sumUpdate');if(btn)btn.onclick=function(){requestSummaryUpdate(slug,btn);};
+}
+async function requestSummaryUpdate(slug,btn){
+  if(!ONLINE){toast('Disconnected — reconnect seal serve');return;}
+  if(btn){btn.disabled=true;btn.textContent='Updating…';}
+  try{const j=await(await fetch('/api/summary',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:labelFor(slug),regenerate:true})})).json();
+    toast(j&&j.ok?'Asked your agent to refresh this brief — it updates here when done':'Error: '+((j&&j.error)||'failed'));}
+  catch(e){toast('Error: '+e.message);}
+  if(btn){btn.disabled=false;btn.textContent='Update now';}
 }
 // No live generation, no spinner, no polling: hand the user the EXACT command to
 // paste into their AI session. The tailored summary appears here after they run
@@ -1065,6 +1088,7 @@ function showPasteCommand(label,near){
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[near]||'';
   pick.parentNode.appendChild(wrap);
   setActiveRole(near,label);
+  placeStale(pick,near);
 }
 
 // The single role-switch entry point (reused by .rp-opt clicks and #lensForm submit).
@@ -1251,12 +1275,21 @@ function setOnline(on){
   if(!on)toast('Disconnected — comments paused until seal serve is back');
   else toast('Reconnected');
 }
+// last doc hash the page is showing; updated whenever liveRefresh pulls fresh markup
+let SEEN_HASH=SEAL.contentHash;
 async function pingServe(){
-  try{const r=await fetch('/api/state',{cache:'no-store',credentials:'same-origin'});setOnline(r.ok);}
+  try{
+    const r=await fetch('/api/state',{cache:'no-store',credentials:'same-origin'});setOnline(r.ok);
+    // doc.md edited on disk (any source: editor, agent, git) → pull the new render in-place.
+    // Guard on document.hidden so a backgrounded tab doesn't fight the user's active edits.
+    const j=await r.json().catch(()=>null);
+    if(j&&j.hash&&j.hash!==SEEN_HASH&&!document.hidden){SEEN_HASH=j.hash;toast('Document changed — refreshed');await liveRefresh();}
+  }
   catch(_){setOnline(false);}
 }
 if(SEAL.mode==='serve'){
   setInterval(pingServe,10000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)pingServe();});
   window.addEventListener('online',pingServe);
   window.addEventListener('offline',()=>setOnline(false));
 }
@@ -1567,7 +1600,9 @@ window.addEventListener('beforeunload',function(e){
 try{
   const v=sessionStorage.getItem('seal-view');if(v)setView(v);
   const pn=sessionStorage.getItem('seal-pane');if(pn){setPane(pn);sessionStorage.removeItem('seal-pane');}
-  const rr=sessionStorage.getItem('seal-role');if(rr&&SEAL.summaries[rr])applyRole(rr);
+  const rr=sessionStorage.getItem('seal-role');
+  if(rr&&SEAL.summaries[rr])applyRole(rr);
+  else{var _pk=document.querySelector('#docSummary .rolepick');placeStale(_pk,SEAL.defaultSlug);}
   const scp=sessionStorage.getItem('seal-scroll');if(scp!==null){window.scrollTo(0,+scp);sessionStorage.removeItem('seal-scroll');}
 }catch(e){}
 </script>

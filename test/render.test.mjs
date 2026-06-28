@@ -459,6 +459,16 @@ test('renderReviewPage: a reopened-after-accept suggestion shows applied, not a 
   assert.ok(!html.includes('data-accept="s9"'), 'does not re-offer a broken Accept button');
 });
 
+test('summary drift: per-role source_hash + live contentHash ship to the client', () => {
+  const roles = [{ role: 'Eng', lead: 'x', key_decisions: ['a'], relevant_sections: ['b'], needs_attention: ['c'], source_hash: 'OLDHASH' }];
+  const html = renderReviewPage(minimalOpts({ roles, contentHash: 'NEWHASH', mode: 'serve' }));
+  assert.match(html, /"summaryHashes":\{"eng":"OLDHASH"\}/, 'each role ships its source_hash by slug');
+  assert.match(html, /"contentHash":"NEWHASH"/, 'live doc hash ships for comparison');
+  // the client decides staleness (source_hash !== contentHash) and offers regenerate
+  assert.match(html, /function placeStale/);
+  assert.match(html, /regenerate:true/, 'Update now requests a regenerate');
+});
+
 test('renderReviewPage handles empty roles by auto-deriving a General summary', () => {
   const html = renderReviewPage(minimalOpts({ roles: [], wordCount: 9 }));
   // empty roles → honest generic state, NOT a role-tailored ("written for") digest

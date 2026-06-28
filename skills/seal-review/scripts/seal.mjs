@@ -1173,6 +1173,7 @@ function cmdSummary() {
     key_decisions: body.key_decisions || [],
     relevant_sections: body.relevant_sections || body.sections || [],
     needs_attention: body.needs_attention || body.needs_your_judgment || [],
+    source_hash: liveHash(doc),   // the doc version this summary was written for (drift detection)
   };
   const sp = upsertSummaryRole(doc, roleObj);
   // re-render so the static page reflects the new role too
@@ -1398,6 +1399,12 @@ function cmdServe() {
           const roles = readSummaryRoles(doc);
           const want = (body.role || '').trim();
           const hit = findRole(roles, want);
+          // regenerate: doc drifted, so re-ask the agent to rewrite an EXISTING role's brief
+          if (hit && body.regenerate) {
+            try { appendFileSync(requestsPath(doc), JSON.stringify({ role: hit.role, at: nowISO(), regenerate: true }) + '\n'); } catch {}
+            emitEvent({ type: 'summary_request', role: hit.role, doc, regenerate: true, hint: `ACTION: the doc changed — regenerate the "${hit.role}" brief and run: seal summary --in ${doc} --role "${hit.role}" --file <json>` });
+            return J(res, 200, { ok: true, status: 'generating', role: hit.role });
+          }
           if (hit) return J(res, 200, { ok: true, status: 'ready', role: hit.role, summary: hit });
           // durable queue so the agent can fulfil it even if it missed the live event
           try { appendFileSync(requestsPath(doc), JSON.stringify({ role: want, at: nowISO() }) + '\n'); } catch {}
