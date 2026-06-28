@@ -453,6 +453,23 @@ function unsharedComments(doc, git) {
     return false;
   } catch { return false; }   // no upstream / detached / errors → treat as shared (don't nag)
 }
+// Fast-forward the local branch to its upstream so a doc edited on GitHub lands
+// in the working tree (the serve renders the LOCAL doc). FF-ONLY: never rewrites
+// or merges local work — if the branch has diverged or a local change would be
+// clobbered, git refuses and we skip. Returns true if the doc actually advanced.
+function ffMergeFromUpstream(doc) {
+  try {
+    const g = gitInfo(dirname(doc));
+    if (!g.inRepo || !g.remote) return false;
+    const G = (args) => execFileSync('git', args, { cwd: g.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const br = G(['rev-parse', '--abbrev-ref', 'HEAD']);
+    if (!br || br === 'HEAD') return false;                 // detached → skip
+    G(['fetch', 'origin', br]);
+    const before = G(['rev-parse', 'HEAD']);
+    G(['merge', '--ff-only', `origin/${br}`]);              // aborts (throws) if not a clean fast-forward
+    return G(['rev-parse', 'HEAD']) !== before;
+  } catch { return false; }
+}
 function regen(doc, r) {
   if (flag('no-render')) return null;
   const out = htmlPath(doc);
@@ -1236,7 +1253,7 @@ function cmdServe() {
       }
       if (req.method === 'GET' && url.pathname === '/api/state') {
         const { r } = loadSidecar(doc);
-        return J(res, 200, { ok: true, comments: r.comments.length, auto_commit: AUTO_COMMIT });
+        return J(res, 200, { ok: true, comments: r.comments.length, auto_commit: AUTO_COMMIT, hash: liveHash(doc) });
       }
       // commit + push the review from the page
       if (req.method === 'POST' && url.pathname === '/api/commit') {
@@ -1411,6 +1428,14 @@ function cmdServe() {
       let pulling = false;
       const pullTick = () => {
         if (pulling) return; pulling = true;
+        // 1) fast-forward the DOC from GitHub (edits made on github.com land locally)
+        try {
+          if (ffMergeFromUpstream(doc)) {
+            const h = liveHash(doc);
+            emitEvent({ type: 'doc_synced', doc, content_hash: h, hint: 'doc updated from GitHub — the role summary/brief is now stale; regenerate with `seal summary` (or /seal-role)' });
+          }
+        } catch { /* skip */ }
+        // 2) pull the PR COMMENTS into the sidecar
         try { const r = corePull(doc, {}); if (r.imported || r.resolved) emitEvent({ type: 'pr_synced', imported: r.imported, resolved: r.resolved, pr: r.pr, doc, hint: 'pulled new GitHub PR comments into the review' }); }
         catch { /* no PR yet / transient — retry next tick */ }
         finally { pulling = false; }
