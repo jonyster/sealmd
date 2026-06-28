@@ -5,7 +5,9 @@
 // ============================================================================
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeWorkspace, runSeal } from './helper.mjs';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { makeWorkspace, runSeal, SEAL, sealToken } from './helper.mjs';
 
 // Local-only helper: pull the parsed JSON record of the (first) comment from the
 // sidecar so a test can inspect/mutate the stored anchor directly. Defined here
@@ -594,4 +596,111 @@ test('empty-string suggestion deletes the anchored span', () => {
   } finally {
     ws.cleanup();
   }
+});
+
+// ============================================================================
+// Owner edit via the serve API (/api/doc → coreSaveDoc). Relocated here from
+// the (deleted) approval test file: the owner Markdown-editor write path + its
+// empty/non-string guard are core review behavior, unrelated to approval.
+// ============================================================================
+
+// minimal serve harness: pick a free port, spawn `seal serve`, wait until it
+// answers, run fn(base), tear down. Loopback only, no network.
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = createServer();
+    s.once('error', reject);
+    s.listen(0, '127.0.0.1', () => {
+      const { port } = s.address();
+      s.close(() => resolve(port));
+    });
+  });
+}
+
+async function withServer(ws, fn) {
+  const port = await freePort();
+  const child = spawn(process.execPath, [SEAL, 'serve', '--in', ws.doc, '--port', String(port)], {
+    cwd: ws.dir,
+    env: { ...process.env, CI: '1', NO_COLOR: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const deadline = Date.now() + 10000;
+    for (;;) {
+      try { await fetch(base + '/api/state'); break; } catch (e) {
+        if (Date.now() > deadline) throw new Error('serve never came up: ' + e.message);
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+    return await fn(base);
+  } finally {
+    child.kill('SIGKILL');
+    await new Promise((r) => child.on('exit', r));
+  }
+}
+
+async function postJson(base, path, body) {
+  const res = await fetch(base + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-seal-token': await sealToken(base) },
+    body: JSON.stringify(body),
+  });
+  let json = null;
+  try { json = await res.json(); } catch {}
+  return { status: res.status, json };
+}
+
+test('owner edit via /api/doc rewrites doc.md and reports the new hash', async () => {
+  const ws = initWs();
+  try {
+    const before = ws.read('doc.md');
+    const newMd = DOC + '\n## Owner Addendum\nThe owner rewrote this in the Markdown editor.\n';
+    const liveHash = runSeal(['hash', '--in', ws.doc], { cwd: ws.dir }).json.content_hash;
+
+    const { status: code, json } = await withServer(ws, (base) =>
+      postJson(base, '/api/doc', { markdown: newMd }));
+
+    assert.equal(code, 200, 'owner save should succeed');
+    assert.equal(json.ok, true);
+    assert.ok(json.content_hash, 'content_hash returned');
+    assert.notEqual(json.content_hash, liveHash, 'owner edit must change the hash');
+
+    // doc.md actually rewritten on disk (atomic tmp->rename path in coreSaveDoc)
+    const after = ws.read('doc.md');
+    assert.notEqual(after, before);
+    assert.equal(after, newMd, 'doc.md holds exactly the saved markdown');
+    // the new on-disk live hash matches what /api/doc reported
+    assert.equal(runSeal(['hash', '--in', ws.doc], { cwd: ws.dir }).json.content_hash, json.content_hash);
+  } finally { ws.cleanup(); }
+});
+
+test('owner edit via /api/doc REFUSES empty markdown (guard, no file write)', async () => {
+  const ws = initWs();
+  try {
+    const before = ws.read('doc.md');
+    for (const bad of ['', '   ', '\n\t\n']) {
+      const { status: code, json } = await withServer(ws, (base) =>
+        postJson(base, '/api/doc', { markdown: bad }));
+      assert.equal(code, 400, `empty markdown ${JSON.stringify(bad)} must be rejected`);
+      assert.equal(json.ok, false);
+      assert.match(json.error, /refusing to write empty markdown/i);
+    }
+    // doc.md must be untouched by the rejected writes
+    assert.equal(ws.read('doc.md'), before, 'guarded write must not clobber doc.md');
+  } finally { ws.cleanup(); }
+});
+
+test('owner edit via /api/doc REFUSES a non-string markdown payload', async () => {
+  const ws = initWs();
+  try {
+    const before = ws.read('doc.md');
+    // markdown omitted entirely -> typeof !== 'string' -> same guard
+    const { status: code, json } = await withServer(ws, (base) =>
+      postJson(base, '/api/doc', { notMarkdown: 'oops' }));
+    assert.equal(code, 400);
+    assert.equal(json.ok, false);
+    assert.match(json.error, /refusing to write empty markdown/i);
+    assert.equal(ws.read('doc.md'), before);
+  } finally { ws.cleanup(); }
 });

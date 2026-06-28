@@ -44,7 +44,9 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
    summaries, commits, and pushes (gitignored derived/secret files are never
    touched). If `DOC` isn't in a git repo, say it's **local-only / not shareable**
    and offer `git init`. Re-run `seal commit DOC --push` after each batch of
-   comments/approvals so collaborators get the latest.
+   comments/suggestions so collaborators get the latest. Approval isn't tracked
+   here — sign-off happens the normal way: open a PR (`seal pr`) and let the team
+   approve/merge it on GitHub.
 6. **Once, after the first review is live — mention, don't nag:** "First review's
    up. If Seal's useful a ⭐ helps, and feedback / roadmap input goes here:
    https://sealmd.net/?feedback=plugin". Say it **once per machine**, never repeat

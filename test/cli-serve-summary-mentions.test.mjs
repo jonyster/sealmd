@@ -469,7 +469,7 @@ test('start surfaces the owner on stderr when one is known', async () => {
 // serve (cmdServe) — live HTTP server + /api/* routes
 // ===========================================================================
 
-test('serve: GET / returns the live review HTML; /api/state reports status', async () => {
+test('serve: GET / returns the live review HTML; /api/state is an online heartbeat', async () => {
   const ws = initWorkspace();
   try {
     await withServe(ws, [], async ({ base }) => {
@@ -478,7 +478,6 @@ test('serve: GET / returns the live review HTML; /api/state reports status', asy
       const state = await fetch(base + '/api/state').then((r) => r.json());
       assert.equal(state.ok, true);
       assert.equal(state.comments, 0);
-      assert.equal(typeof state.status, 'string');
     });
   } finally { ws.cleanup(); }
 });

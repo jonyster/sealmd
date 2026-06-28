@@ -1,7 +1,7 @@
 // ============================================================================
 // END-TO-END full review lifecycle in ONE fresh tmp git repo with a LOCAL BARE
 // remote as 'origin' (no GitHub). Drives BOTH layers:
-//   - the CLI subcommands (init/comment/accept/submit/approve/request/render/commit)
+//   - the CLI subcommands (init/comment/accept/render/commit)
 //   - the serve HTTP API (POST /api/comment, /api/accept, /api/dismiss,
 //     /api/doc, /api/commit) on a loopback port, asserting JSON shape AND the
 //     resulting .seal.md sidecar + doc.md on disk.
@@ -9,8 +9,7 @@
 // One workspace, several documents, full lifecycle, asserting state at each step:
 //   init -> anchored comment -> general (unanchored) comment -> suggestion ->
 //   reply -> resolve -> dismiss -> accept (assert doc.md changed + hash drift) ->
-//   owner edit via /api/doc (assert hash change + approvals stale) -> submit ->
-//   approve + request-changes from two approvers -> render (assert .review.html
+//   owner edit via /api/doc (assert hash change) -> render (assert .review.html
 //   markers) -> commit (assert .seal.md + doc committed, push to the bare remote).
 //   Anchors are asserted to re-anchor after the edit.
 //
@@ -162,8 +161,8 @@ test('E2E: full review lifecycle across CLI + serve API, push to a local bare re
   const docC = repo.doc('infra.md');
   let srv = null;
   try {
-    // ---- init all three docs (CLI). Quorum 2 on the primary doc. ----
-    const initA = runSeal(['init', '--in', docA, '--title', 'Payments Spec', '--quorum', '2', '--owner', 'Owner One'], { cwd: repo.dir });
+    // ---- init all three docs (CLI). ----
+    const initA = runSeal(['init', '--in', docA, '--title', 'Payments Spec', '--owner', 'Owner One'], { cwd: repo.dir });
     assert.equal(initA.code, 0, initA.stderr);
     assert.equal(initA.json.ok, true);
     assert.equal(initA.json.action, 'init');
@@ -180,8 +179,6 @@ test('E2E: full review lifecycle across CLI + serve API, push to a local bare re
     git(repo.dir, ['push', '-q', '-u', 'origin', branch]);
 
     let s = statusJson(repo, docA);
-    assert.equal(s.status, 'draft');
-    assert.equal(s.approvals.quorum, 2);
     assert.equal(s.comments.total, 0);
 
     // ---- anchored comment on a REAL quote (CLI) ----
@@ -276,24 +273,7 @@ test('E2E: full review lifecycle across CLI + serve API, push to a local bare re
     assert.equal(sugRec.status, 'resolved');
     assert.equal(sugRec.accepted, true);
 
-    // ===== SUBMIT (CLI) -> pins to the live (post-accept) version =====
-    const sub = runSeal(['submit', '--in', docA], { cwd: repo.dir });
-    assert.equal(sub.code, 0, sub.stderr);
-    assert.equal(sub.json.status, 'in_review');
-    const submittedHash = sub.json.content_hash;
-    assert.equal(submittedHash, afterAcceptHash, 'submit pins the live version');
-
-    const ap1 = runSeal(['approve', '--in', docA, '--approver', 'Approver One', '--note', 'LGTM'], { cwd: repo.dir });
-    assert.equal(ap1.code, 0, ap1.stderr);
-    const rq = runSeal(['request', '--in', docA, '--approver', 'Approver Two', '--note', 'needs a rollback plan'], { cwd: repo.dir });
-    assert.equal(rq.code, 0, rq.stderr);
-
-    s = statusJson(repo, docA);
-    assert.equal(s.status, 'changes_requested', 'a veto dominates over an approval');
-    assert.equal(s.approvals.approved, 1);
-    assert.deepEqual(s.approvals.vetoes, ['Approver Two']);
-
-    // ===== OWNER EDIT via /api/doc — hash change + approvals stale =====
+    // ===== OWNER EDIT via /api/doc — hash change =====
     const editedMarkdown = afterDoc.replace(
       'There is a risk that anchors drift when the document changes underneath them.',
       'There is a risk that anchors drift when the document changes underneath them.\n\nWe mitigate drift with prefix/suffix context windows.');
@@ -308,12 +288,6 @@ test('E2E: full review lifecycle across CLI + serve API, push to a local bare re
     assert.notEqual(afterEditHash, beforeEditHash, 'hash changed after the owner edit');
     assert.ok(repo.read('payments.md').includes('prefix/suffix context windows'), 'edit landed on disk');
 
-    s = statusJson(repo, docA);
-    assert.equal(s.doc_edited_after_submit, true, 'approvals go stale after a post-submit edit');
-    assert.equal(s.approvals.approved_for_current_version, false, 'no longer approved for the live version');
-    assert.equal(s.state_hash, submittedHash, 'state still pinned to the submitted version');
-    assert.notEqual(s.live_hash, s.state_hash, 'live drifted from pinned');
-
     // Anchors RE-ANCHOR: the surviving "across regions" anchor still resolves
     // after the edit. (The accepted suggestion's old quote "Redis for caching"
     // is legitimately gone, so it is the ONE expected unanchored record.)
@@ -326,12 +300,6 @@ test('E2E: full review lifecycle across CLI + serve API, push to a local bare re
     assert.equal(postEditComment.code, 0, postEditComment.stderr);
     assert.equal(postEditComment.json.anchored, true, 're-anchors against the edited doc');
 
-    const resub = runSeal(['submit', '--in', docA], { cwd: repo.dir });
-    assert.equal(resub.code, 0, resub.stderr);
-    assert.equal(resub.json.content_hash, afterEditHash, 're-submit pins the edited version');
-    s = statusJson(repo, docA);
-    assert.equal(s.doc_edited_after_submit, false, 'no longer stale after re-submit');
-
     // ===== RENDER (CLI) — .review.html markers =====
     const rend = runSeal(['render', '--in', docA], { cwd: repo.dir });
     assert.equal(rend.code, 0, rend.stderr);
@@ -340,7 +308,6 @@ test('E2E: full review lifecycle across CLI + serve API, push to a local bare re
     assert.match(html, /Payments Spec/, 'title rendered');
     assert.match(html, /Memcached for caching/, 'accepted suggestion reflected in the doc body');
     assert.match(html, /good mitigation/, 'a live comment body is present');
-    assert.match(html, /class="badge/, 'status badge marker present');
     assert.match(html, /window\.__/, 'the live page hydration marker is present');
 
     // ===== COMMIT via the serve API -> push to the bare remote =====

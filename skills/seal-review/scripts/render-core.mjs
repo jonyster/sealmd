@@ -346,28 +346,6 @@ function card(c) {
   ${quoted}<div class="ctext">${renderInline(c.body)}</div>${threadHtml}${cardActions(c)}</div>`;
 }
 
-function statusBadge(review) {
-  if (!review) return { cls: '', label: 'review' };
-  const s = review.status;
-  if (s === 'approved' && review.approved_for_current_version) return { cls: 'ok', label: `Approved · ${review.approves}/${review.quorum}` };
-  if (s === 'approved') return { cls: 'amber', label: 'Approved (superseded)' };
-  if (s === 'changes_requested') return { cls: 'amber', label: 'Changes requested' };
-  if (s === 'in_review') return { cls: 'seal', label: `In review · ${review.approves}/${review.quorum}` };
-  return { cls: '', label: 'Draft' };
-}
-
-function approvalsPanel(review) {
-  if (!review || (review.status === 'draft' && review.approvals.length === 0)) return '';
-  const cards = review.approvals.map((a) => {
-    const ok = a.decision === 'approved';
-    const tag = !a.current ? '<span class="ctype">superseded</span>' : a.valid_now ? '<span class="ctype suggest">current</span>' : '<span class="ctype">stale</span>';
-    return `<div class="card"><div class="chead"><span class="av ${ok ? 'pm' : 'agent'}">${avInitials(a.approver)}</span>
-      <div style="min-width:0"><div class="who-name">${escapeHtml(a.approver)}</div><div class="who-sub">${ok ? 'approved' : 'requested changes'} · <code>${escapeHtml((a.content_hash || '').slice(0, 10))}</code></div></div>${tag}</div>
-      ${a.note ? `<div class="body">${renderInline(a.note)}</div>` : ''}</div>`;
-  }).join('\n');
-  return `<h2 class="railhdr" style="margin-top:18px">Approvals · ${review.approves}/${review.quorum}${review.doc_edited_after_submit ? ' · <span style="color:var(--amber)">stale</span>' : ''}</h2><div class="cards">${cards}</div>`;
-}
-
 const SEAL_SVG = `<svg viewBox="0 0 80 64" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M40 6 C41.74 6, 42.87 13.56, 45.21 14.25 C47.55 14.94, 52.6 9.19, 54.06 10.13 C55.52 11.07, 52.38 18.04, 53.98 19.89 C55.58 21.73, 62.93 19.62, 63.65 21.2 C64.37 22.78, 57.96 26.95, 58.31 29.37 C58.66 31.78, 65.98 33.98, 65.74 35.7 C65.49 37.42, 57.84 37.46, 56.83 39.69 C55.81 41.91, 60.79 47.71, 59.65 49.03 C58.51 50.34, 52.06 46.24, 50 47.56 C47.95 48.88, 48.99 56.46, 47.33 56.95 C45.66 57.44, 42.44 50.5, 40 50.5 C37.56 50.5, 34.34 57.44, 32.67 56.95 C31.01 56.46, 32.05 48.88, 30 47.56 C27.94 46.24, 21.49 50.34, 20.35 49.03 C19.21 47.71, 24.19 41.91, 23.17 39.69 C22.16 37.46, 14.51 37.42, 14.26 35.7 C14.02 33.98, 21.34 31.78, 21.69 29.37 C22.04 26.95, 15.63 22.78, 16.35 21.2 C17.07 19.62, 24.42 21.73, 26.02 19.89 C27.62 18.04, 24.48 11.07, 25.94 10.13 C27.4 9.19, 32.45 14.94, 34.79 14.25 C37.13 13.56, 38.26 6, 40 6 Z"/><circle cx="40" cy="32" r="13"/><path d="M33.5 32.5 L38 37 L47.5 26"/></svg>`;
 // Favicon = the same seal stamp. Data-URI favicons have no currentColor context,
 // so bake the brand stroke (#5266eb) in; crop viewBox to a square around the mark.
@@ -380,7 +358,7 @@ export function renderReviewPage({
   title, owner = null, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
   curatedRoles = [], reviewerRole = '', people = [],
   canCommit = false, gitRemote = null, autoCommit = false, dirty = false, canPR = false,
-  mdRaw, contentHash, wordCount, comments = [], review = null, renderedAt = '', mode = 'static', token = '', generic = false,
+  mdRaw, contentHash, wordCount, comments = [], renderedAt = '', mode = 'static', token = '', generic = false,
 }) {
   const isGeneric = generic || !roles.length;   // auto-derived summary, not agent-tailored
   if (!roles.length) roles = [{ role: 'General', ...deriveSummary(mdRaw, wordCount) }];
@@ -399,7 +377,6 @@ export function renderReviewPage({
   const srcChip = srcIsHttp
     ? `<a class="src" id="srcChip" href="${escapeHtml(srcUrl)}" target="_blank" rel="noopener" title="Open ${escapeHtml(srcName)} on GitHub">${escapeHtml(srcName)} ↗</a>`
     : `<button type="button" class="src" id="srcChip" title="Reveal ${escapeHtml(srcName)} in your file manager">${escapeHtml(srcName)}</button>`;
-  const badge = statusBadge(review);
   const verChip = `v·${escapeHtml(contentHash.slice(0, 7))}`;
 
   // ---- role data: key everything by slug(label) -----------------------------
@@ -887,7 +864,6 @@ ${rolebar}
       </div>
       <div class="readprompt">
         <span id="liveTag" title="Sealed by content hash">sealed wording</span>
-        <span class="badge ${badge.cls}">${badge.label}</span>
       </div>
       <span class="spacer"></span>
       <button class="ghost owneract" id="editBtn" title="Edit the document (writes doc.md)">✎ Edit</button>
@@ -927,11 +903,10 @@ ${rolebar}
       <div class="railpane on" id="paneBrief">
         <div class="brief" id="brief">
           <div class="bh"><div class="k">Change Brief</div>
-            <div class="t">What this document asks you to approve</div>
+            <div class="t">What changed and why it matters</div>
             <div class="s">Tailored to your role.</div></div>
-          <div class="bbody">Open <b>Summary</b> for the role-tailored digest, or <b>Full doc</b> to read every section. ${approvalsPanel(review) ? 'Approval state is shown below.' : 'This document has not been submitted for sign-off yet.'}</div>
+          <div class="bbody">Open <b>Summary</b> for the role-tailored digest, or <b>Full doc</b> to read every section.</div>
         </div>
-        ${approvalsPanel(review)}
         <div class="brieffoot">Rendered 100% locally · zero network calls.</div>
       </div>
 
@@ -969,7 +944,7 @@ ${rolebar}
 <div class="footbanner" id="footBanner">
   <span class="fb-ic">🔒</span>
   <span>Rendered 100% locally${renderedAt ? ` · ${escapeHtml(renderedAt)}` : ''} · content hash <code>${escapeHtml(contentHash.slice(0, 8))}…${escapeHtml(contentHash.slice(-3))}</code></span>
-  <span class="fb-pill" title="approvals bind to the content hash and go stale when the doc changes">content-bound · drift-detected</span>
+  <span class="fb-pill" title="comments bind to the content hash; edits show as drift">content-bound · drift-detected</span>
 </div>
 
 <div class="offline-banner" id="offlineBanner" hidden>⚠ Disconnected from <code>seal serve</code> — comments, suggestions &amp; edits are paused until it reconnects.</div>
@@ -988,7 +963,7 @@ ${rolebar}
     <button class="btn primary tiny" id="scPost">Comment</button>
   </div>
 </div>
-<div class="editbar" id="editBar" hidden><span class="ebnote">Editing Markdown — <b>Save</b> writes <code>doc.md</code> (content hash changes, approvals re-open)</span><span class="spacer"></span><button class="btn ghost tiny" id="editCancel">Cancel</button><button class="btn primary tiny" id="editSave">Save to doc.md</button></div>
+<div class="editbar" id="editBar" hidden><span class="ebnote">Editing Markdown — <b>Save</b> writes <code>doc.md</code> (content hash changes; anchored comments re-resolve)</span><span class="spacer"></span><button class="btn ghost tiny" id="editCancel">Cancel</button><button class="btn primary tiny" id="editSave">Save to doc.md</button></div>
 <div class="mentionmenu" id="mentionMenu" hidden></div>
 <div class="sharedlg" id="shareDlg" hidden>
   <div class="sharecard">

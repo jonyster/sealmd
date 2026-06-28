@@ -273,18 +273,6 @@ test('formatEvent: suggestion uses ✎ and shows anchor', () => {
   assert.match(out, /suggested an edit on “the goals section”/);
 });
 
-test('formatEvent: approved uses ✅ and approver name', () => {
-  const out = formatEvent({ type: 'approved', approver: 'Carol', doc: 'd.md' });
-  assert.match(out, /✅/);
-  assert.match(out, /\*Carol\* approved/);
-});
-
-test('formatEvent: changes_requested uses ✏️', () => {
-  const out = formatEvent({ type: 'changes_requested', author: 'Dan', doc: 'd.md' });
-  assert.match(out, /✏️/);
-  assert.match(out, /requested changes/);
-});
-
 test('formatEvent: reply uses ↩︎', () => {
   const out = formatEvent({ type: 'reply', author: 'Eve', doc: 'd.md' });
   assert.match(out, /↩︎/);
