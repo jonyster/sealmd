@@ -840,6 +840,24 @@ export function changedRightLines(G, base, head, rel) {
 // Idempotent: inline comments carry a `seal:c=<id>` marker (skipped if already posted) and
 // the summary comment carries `seal:pr-comments` (its prior copy is deleted before repost).
 // Best-effort + throws nothing the caller cares about — corePR wraps it. Returns counts.
+// Body for a mirrored review comment. A suggestion becomes a NATIVE GitHub
+// ```suggestion block (author gets one-click "Commit suggestion") — but only when
+// native:true (the comment sits inline on the diff line it replaces) and the
+// replacement holds no ``` fence (which would break the block). Otherwise it
+// degrades to plain `_Suggested:_` text (used for the non-inline summary path).
+export function formatReviewComment(c, { native = false } = {}) {
+  const who = c.author ? `**${c.author}**: ` : '';
+  const thread = (c.thread || []).map((t) => `\n\n↳ **${t.author || '?'}**: ${t.body || ''}`).join('');
+  let sug = '';
+  if (c.suggestion != null) {
+    const s = String(c.suggestion);
+    sug = native && !s.includes('```')
+      ? `\n\n\`\`\`suggestion\n${s}\n\`\`\``
+      : `\n\n_Suggested:_ \`${s.replace(/`/g, '​`')}\``;
+  }
+  return `${who}${c.body || ''}${sug}${thread}`;
+}
+
 function corePostReviewComments(doc, git, { prUrl, head, base }) {
   const GHB = ghBin();
   if (!GHB || !git?.inRepo) return { inline: 0, summary: 0, skipped: 0 };
@@ -864,12 +882,7 @@ function corePostReviewComments(doc, git, { prUrl, head, base }) {
   // Already-posted inline ids (dedupe across re-runs / PR reuse).
   const posted = new Set(ghJSON(`repos/${repo}/pulls/${n}/comments`).filter((c) => /seal:c=/.test(c.body || '')).map((c) => (c.body.match(/seal:c=([^\s>]+)/) || [])[1]));
 
-  const fmt = (c) => {
-    const who = c.author ? `**${c.author}**: ` : '';
-    const sug = c.suggestion != null ? `\n\n_Suggested:_ \`${String(c.suggestion).replace(/`/g, '​`')}\`` : '';
-    const thread = (c.thread || []).map((t) => `\n\n↳ **${t.author || '?'}**: ${t.body || ''}`).join('');
-    return `${who}${c.body || ''}${sug}${thread}`;
-  };
+  const fmt = (c, opts) => formatReviewComment(c, opts);
 
   let inline = 0, skipped = 0;
   const leftover = [];
@@ -879,7 +892,7 @@ function corePostReviewComments(doc, git, { prUrl, head, base }) {
       if (posted.has(c.id)) { skipped++; continue; }
       try {
         ghApi(['--method', 'POST', `repos/${repo}/pulls/${n}/comments`, '--input', '-'],
-          JSON.stringify({ body: `<!-- seal:c=${c.id} -->\n${fmt(c)}`, commit_id: commitId, path: rel, line, side: 'RIGHT' }));
+          JSON.stringify({ body: `<!-- seal:c=${c.id} -->\n${fmt(c, { native: true })}`, commit_id: commitId, path: rel, line, side: 'RIGHT' }));
         inline++;
       } catch { leftover.push({ c, line }); } // e.g. line not resolvable → summary
     } else {
