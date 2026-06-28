@@ -36,9 +36,14 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
 5. **Set up + open:**
    ```bash
    seal init    --in DOC --owner "<owner>"
+   seal blocks  --in DOC                           # heading → blk-N jump targets
    seal summary --in DOC --role "<their role>" --file <tmp.json>
    seal start   DOC                                # opens the LIVE review (background task)
    ```
+   Build `<tmp.json>` as `{lead, key_decisions, relevant_sections,
+   needs_attention}`; set `"src":"blk-N"` on each `key_decision` /
+   `relevant_section` (from `seal blocks`) so summary points link into the Full
+   doc. See `/seal-role` for the full schema.
    Give the `http://127.0.0.1:…` URL. **In a git repo, COMMIT it** (don't just
    remind): **`seal commit DOC --push`** — one call stages the doc + review file +
    summaries, commits, and pushes (gitignored derived/secret files are never
