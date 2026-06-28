@@ -1,5 +1,5 @@
 ---
-description: The one command for local document review. `seal new <doc>` guides owner → your role → sharing (MCP if needed) → opens it. `seal open <doc>` opens an existing review. No sub-command = auto-detect.
+description: The one command for local document review. `seal new <doc>` guides owner → your role → sharing (git + email) → opens it. `seal open <doc>` opens an existing review. No sub-command = auto-detect.
 ---
 
 You are running the **sealmd** review flow. `$ARGUMENTS` may contain a doc path.
@@ -84,12 +84,14 @@ and offer `/seal new DOC`.)
      doesn't (or isn't a repo), tell the user it's **local-only / saved on disk**
      and ask for a **repo URL** to push to (`git remote add origin <url>`, or open
      from a cloned repo). No remote = no point committing for sharing.
-   - **Slack** · **Teams** · **Email** · **none**.
-   - For Slack/Teams, ask for the **Incoming Webhook URL**; Email needs a
-     `SEAL_RESEND_KEY`. If they can't provide one, fall back to git.
+   - **Email** — always offer. If picked and `SEAL_RESEND_KEY` isn't set, walk
+     them through it (free key at resend.com → `export SEAL_RESEND_KEY=…`), then
+     ask for the recipient. Skip → Git only.
+   - **Multi-select** (`AskUserQuestion`, `multiSelect: true`) — Git + Email; not
+     mutually exclusive.
 5. **Set up + start:**
    ```bash
-   seal init   --in DOC --owner "<owner>" [--notify git,slack,…] [--slack-webhook <url>]
+   seal init   --in DOC --owner "<owner>" [--notify git,email]
    seal summary --in DOC --role "<their role>" --file <tmp.json>   # generate their tailored view
    seal start  DOC                                                 # opens the LIVE review (background)
    ```
