@@ -688,6 +688,11 @@ export function renderReviewPage({
   #cmtInput:focus{border-color:var(--seal);box-shadow:0 0 0 2px var(--seal-soft)}
   #cmtAuthor{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12.5px;font-family:inherit;outline:none;color:var(--ink);background:var(--input-fill);margin-top:8px}
   #cmtAuthor:focus{border-color:var(--seal)}
+  .cmt-summary-hint{margin-top:7px;font-size:11.5px;line-height:1.45;color:var(--muted)}
+  .linkbtn{border:0;background:none;padding:0;font:inherit;color:var(--seal);cursor:pointer;text-decoration:underline}
+  .cmt-summary-hint .linkbtn{font-size:inherit}
+  /* once a passage is pinned the comment is already anchored — drop the hint */
+  .cmt-compose:has(.cmt-quote:not([hidden])) .cmt-summary-hint{display:none}
   .cmt-compose-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:12px}
   .cmt-hint{color:var(--muted);flex:1}
   .cmt-out{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 11px;font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);white-space:pre-wrap;word-break:break-all;margin-top:8px;display:none}
@@ -908,6 +913,7 @@ export function renderReviewPage({
           <div class="cmt-quote" id="cmtQuote" hidden><span class="cq-text" id="cmtQuoteText"></span>
             <button class="cq-x" id="cmtQuoteClear" type="button" aria-label="Remove pin">&times;</button></div>
           <textarea id="cmtInput" placeholder="Add a comment on this document… (type @ to tag)" rows="2"></textarea>
+          <div class="cmt-summary-hint" id="cmtSummaryHint">Commenting on the whole document. To pin a comment to a specific passage, <button type="button" class="linkbtn" id="cmtToFull">open the Full doc</button> and select the text.</div>
           <input id="cmtAuthor" placeholder="Your name">
           <div class="cmt-compose-row">
             <span class="spacer"></span>
@@ -987,6 +993,7 @@ function setView(v){
   // summary header, hidden in full view, so this covers the common path.
 }
 document.getElementById('viewSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setView(b.dataset.view);});
+{const tf=document.getElementById('cmtToFull');if(tf)tf.onclick=()=>setView('full');}
 
 // ---- rail pane toggle ----
 function setPane(name){
