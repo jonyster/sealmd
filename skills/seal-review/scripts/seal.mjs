@@ -726,6 +726,34 @@ function cmdBlocks() {
   out({ ok: true, action: 'blocks', count: blocks.length, blocks: blocks.map((b) => ({ src: b.blk, tag: b.tag, text: b.text.slice(0, 120) })) });
 }
 
+// One-shot: add src="blk-N" to existing summary points that lack it, matching
+// each point's section/label to a heading block. For role summaries written
+// before the flow emitted jump targets. Only fills missing src; never overwrites.
+function cmdBackfill() {
+  const doc = docPath();
+  const heads = markdownBlocks(readDoc(doc)).filter((b) => /^h[1-6]$/.test(b.tag));
+  // strip leading "§N." / "#" / numbering + punctuation so "§3 Risks" ~ "Risks".
+  const norm = (s) => String(s || '').toLowerCase()
+    .replace(/^[\s§#*]*\d+(\.\d+)*\.?\s*/, '').replace(/[^a-z0-9 ]+/g, '').trim();
+  const match = (label) => {
+    const l = norm(label); if (!l) return null;
+    let h = heads.find((b) => norm(b.text) === l);                                  // exact
+    if (!h) h = heads.find((b) => { const t = norm(b.text); return t && (t.includes(l) || l.includes(t)); }); // contains
+    return h ? h.blk : null;
+  };
+  const roles = readSummaryRoles(doc);
+  if (!roles.length) { out({ ok: true, action: 'backfill', filled: 0, roles: 0, note: 'no summaries' }); return; }
+  let filled = 0;
+  for (const r of roles) {
+    for (const o of (r.relevant_sections || [])) if (o && typeof o === 'object' && !o.src) { const b = match(o.section || o.label); if (b) { o.src = b; filled++; } }
+    for (const o of (r.key_decisions || [])) if (o && typeof o === 'object' && !o.src) { const b = match(o.label); if (b) { o.src = b; filled++; } }
+  }
+  const sp = summaryFilePath(doc), tmp = sp + '.tmp';
+  writeFileSync(tmp, JSON.stringify({ roles }, null, 2)); renameSync(tmp, sp);
+  try { const { r } = loadSidecar(doc); regen(doc, r); } catch {} // refresh static page
+  out({ ok: true, action: 'backfill', filled, roles: roles.length, file: sp });
+}
+
 // Stage the review's committable files (doc + review file + role summaries) and
 // commit — the shareable artifacts. Never touches the gitignored derived/secret
 // files. Core (throws); used by the CLI and the serve /api/commit endpoint.
@@ -1421,6 +1449,7 @@ function run() {
       case 'pull': cmdPull(); break;
       case 'hash': cmdHash(); break;
       case 'blocks': cmdBlocks(); break;
+      case 'backfill-src': cmdBackfill(); break;
       case 'doctor': cmdDoctor(); break;
       default:
         console.error(USAGE);

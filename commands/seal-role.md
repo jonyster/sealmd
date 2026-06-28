@@ -49,3 +49,7 @@ Do this, in order:
 
 Also run `seal pending --in <doc>` first — if the live page already requested
 roles that don't exist yet, generate those too (drain the queue), then step 5.
+
+**Old review missing jump links?** Summaries written before src was emitted
+render as plain text. Run `seal backfill-src --in <doc>` once to match each
+point to its heading and wire the Full-doc hooks (idempotent; never overwrites).
