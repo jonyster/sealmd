@@ -754,11 +754,6 @@ export function renderReviewPage({
   .card.flash{animation:cardflash 1s ease}
   @keyframes cardflash{0%,100%{box-shadow:var(--shadow-card)}25%{box-shadow:0 0 0 2px var(--seal)}}
   /* footer / jump / toast / composer */
-  .footbanner{position:fixed;left:0;right:0;bottom:0;background:var(--panel-2);border-top:1px solid var(--line);box-shadow:var(--shadow-card);z-index:40;padding:10px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-soft)}
-  .footbanner .fb-ic{display:inline-flex;color:var(--muted)}
-  .footbanner b{color:var(--ink);font-weight:600}
-  .footbanner code{font-family:var(--font-mono);font-size:11px;background:var(--panel);padding:1px 5px;border-radius:var(--r-sm)}
-  .footbanner .fb-pill{margin-left:auto;background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:var(--r-sm);padding:3px 10px;font-size:11px;font-weight:500;white-space:nowrap}
   .offline-banner{position:fixed;top:0;left:0;right:0;z-index:200;background:#b3261e;color:#fff;text-align:center;padding:7px 14px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow-card)}
   .offline-banner code{background:rgba(255,255,255,.18);border-radius:3px;padding:0 4px}
   .opt-pending{opacity:.6}
@@ -961,12 +956,6 @@ export function renderReviewPage({
 </div>
 
 <a class="railjump" id="railJump" href="#railSeg">Brief &amp; comments${totalCount ? `<span class="rj-count">${totalCount}</span>` : ''}</a>
-
-<div class="footbanner" id="footBanner">
-  <span class="fb-ic">🔒</span>
-  <span>Rendered 100% locally${renderedAt ? ` · ${escapeHtml(renderedAt)}` : ''} · content hash <code>${escapeHtml(contentHash.slice(0, 8))}…${escapeHtml(contentHash.slice(-3))}</code></span>
-  <span class="fb-pill" title="comments bind to the content hash; edits show as drift">content-bound · drift-detected</span>
-</div>
 
 <div class="offline-banner" id="offlineBanner" hidden>⚠ Disconnected from <code>seal serve</code> — comments, suggestions &amp; edits are paused until it reconnects.</div>
 <div class="toast" id="toast"></div>
