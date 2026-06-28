@@ -706,6 +706,7 @@ export function renderReviewPage({
   .cmt-summary-hint{margin-top:7px;font-size:11.5px;line-height:1.45;color:var(--muted)}
   .linkbtn{border:0;background:none;padding:0;font:inherit;color:var(--seal);cursor:pointer;text-decoration:underline}
   .sumstale{margin:10px 0 4px;padding:9px 12px;font-size:12.5px;line-height:1.45;color:var(--ink-soft);background:color-mix(in srgb,#d9a800 16%,var(--paper));border:1px solid color-mix(in srgb,#d9a800 40%,var(--line));border-radius:var(--r-sm)}
+  .sumstale-hint{color:var(--muted);font-size:11.5px}
   .cmt-summary-hint .linkbtn{font-size:inherit}
   /* once a passage is pinned the comment is already anchored — drop the hint */
   .cmt-compose:has(.cmt-quote:not([hidden])) .cmt-summary-hint{display:none}
@@ -1062,7 +1063,7 @@ function placeStale(pick,slug){
   var ex=document.getElementById('sumStale');if(ex)ex.remove();
   if(SEAL.mode!=='serve'||!isStale(slug)||!pick)return;
   var d=document.createElement('div');d.className='sumstale';d.id='sumStale';
-  d.innerHTML='⚠ This brief reflects an earlier version of the doc — it has changed since. <button type="button" class="linkbtn" id="sumUpdate">Update now</button>';
+  d.innerHTML='⚠ This brief reflects an earlier version of the doc — it has changed since. <button type="button" class="linkbtn" id="sumUpdate">Copy refresh command</button> <span class="sumstale-hint">→ paste into Claude Code</span>';
   pick.after(d);
   var btn=d.querySelector('#sumUpdate');if(btn)btn.onclick=function(){requestSummaryUpdate(slug,btn);};
 }
