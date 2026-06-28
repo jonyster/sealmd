@@ -17,8 +17,15 @@ test('stripGithubQuote keeps only the reply, drops the quoted block', () => {
   assert.equal(stripGithubQuote(body), 'you are wrong');
 });
 
-test('a pure quote (no new text) strips to empty → nothing to import', () => {
-  assert.equal(stripGithubQuote('> just a quote\n> more quote'), '');
+test('a pure quote-reply OF OUR comment (no new text) strips to empty → nothing to import', () => {
+  assert.equal(stripGithubQuote('> <!-- seal:c=abc -->\n> i dint get it'), '');
+});
+
+test('a HUMAN Markdown blockquote (no seal marker) is preserved, never stripped', () => {
+  // leading blockquote the reviewer typed themselves — must survive
+  assert.equal(stripGithubQuote('> the spec says X\n> and Y\n\nI disagree with this'), '> the spec says X\n> and Y\n\nI disagree with this');
+  // an all-blockquote human reply is kept whole
+  assert.equal(stripGithubQuote('> quoting the doc here'), '> quoting the doc here');
 });
 
 test('sealCommentRef finds the parent comment id even inside a quote', () => {
