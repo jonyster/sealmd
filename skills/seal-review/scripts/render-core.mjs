@@ -8,8 +8,9 @@
 // Production parity:
 //   - production token set (light+dark, :root[data-theme]) verbatim
 //   - chrome -> modebanner (underline view tabs) -> workspace(pagecol + rail)
-//   - .rolebar role switcher: .lensin + <datalist> + .lensgo + .lenspills (+N more)
-//   - summary surface: stag "written for <role>", lead, key decisions,
+//   - .rolepick inline role switcher: "Summary · written for <role>" button -> a
+//     listbox of every taxonomy role + a "type a role" custom field (#lensForm)
+//   - summary surface: role-tailored lead, key decisions,
 //     "What this means for you" (relevant_sections), "Your call to make"
 //   - .railseg (Change Brief / Comments / Ask) with .railpane toggling
 //   - cards in the production .card / .sg suggestion style
@@ -395,37 +396,37 @@ export function renderReviewPage({
   const taxonomy = (Array.isArray(curatedRoles) && curatedRoles.length && typeof curatedRoles[0] === 'object')
     ? curatedRoles.map((c) => ({ slug: c.value, label: c.label }))
     : roles.map((r) => ({ slug: slugifyRole(r.role) || 'general', label: r.role }));
-  // datalist = taxonomy labels (+ any extra pre-generated role labels not in it)
-  const optLabels = []; const seen = new Set();
-  for (const lbl of [...taxonomy.map((t) => t.label), ...roles.map((r) => r.role)]) {
-    const k = String(lbl || '').toLowerCase();
-    if (!lbl || seen.has(k)) continue; seen.add(k); optLabels.push(lbl);
-  }
-  const datalist = optLabels.map((l) => `<option value="${escapeHtml(l)}"></option>`).join('');
-
   // ensure every taxonomy slug has a label for client-side labelFor()
   for (const t of taxonomy) if (!roleLabels[t.slug]) roleLabels[t.slug] = t.label;
 
-  // Pills are rendered CLIENT-side from a sticky, user-editable set (localStorage).
-  // The ▼ dropdown opens the full taxonomy to add a role; each added pill has an ×.
-  // When the summary is auto-derived (no agent authored one), don't dress it as a
-  // role-tailored digest or imply other roles are one click away. In static mode the
-  // role picker is hidden entirely; in serve mode it stays (the agent can generate).
-  const stag = isGeneric
-    ? `<div class="stag">${ICONS.spark} Auto-generated summary · <b>no agent yet</b></div>`
-    : `<div class="stag">${ICONS.spark} Seal summary · written for <b>${escapeHtml(defaultLabel)}</b></div>`;
-  const rolebar = (isGeneric && mode !== 'serve') ? '' : `<div class="rolebar">
-  <form class="lensbox" id="lensForm" autocomplete="off">
-    <input id="roleInput" class="lensin" value="${escapeHtml(defaultLabel)} summary" placeholder="Summary for… type any role" aria-label="Summary role" spellcheck="false">
-    <button class="lensgo" type="submit" aria-label="Apply">${ICONS.arrow}</button>
-    <button class="lensdrop" id="lensMore" type="button" aria-label="Browse roles" title="Browse roles">▾</button>
-  </form>
-  <span class="rl-hint">type any role, or ▾ to pick · pills stay — × to remove</span>
-</div>`;
-  const summaryHtml = `${stag}
-${rolebar}
-<div class="lensmenu" id="lensMenu" hidden></div>
-<div class="lenspills" id="lensPills"></div>
+  // Single inline role-picker dropdown (mirrors sealmd.net demo.html .rolepick).
+  // Spark + "Summary · written for <role>" + a button that opens a listbox of every
+  // role the renderer has (taxonomy), plus a "type a role" custom field (#lensForm /
+  // #roleInput — the existing custom-role submit path). When the summary is
+  // auto-derived (no agent) AND we're in static mode, there's nothing to switch to,
+  // so we degrade to a plain non-interactive label (no button/menu).
+  const rpSpark = ICONS.spark.replace('class="icon"', 'class="rp-spark"');
+  const rpOpts = taxonomy.map((t) =>
+    `<button type="button" role="option" class="rp-opt${t.slug === defaultSlug ? ' is-on' : ''}" data-role="${escapeHtml(t.slug)}">${escapeHtml(t.label)}</button>`).join('');
+  const summaryHtml = (isGeneric && mode !== 'serve')
+    ? `<div class="rolepick">${rpSpark}<span class="rp-pre">Auto-generated summary · <b>no agent yet</b></span></div>
+<div id="sumReady">${roleMap[defaultSlug]}</div>`
+    : `<div class="rolepick">
+  ${rpSpark}
+  <span class="rp-pre">Summary · written for</span>
+  <button type="button" class="rp-btn" aria-haspopup="listbox" aria-expanded="false">
+    <span class="rp-cur">${escapeHtml(defaultLabel)}</span>
+    <svg class="rp-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+  </button>
+  <div class="rp-menu" role="listbox" hidden>
+    <form class="rp-custom" id="lensForm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      <input id="roleInput" type="text" placeholder="Type a role…" aria-label="Type a role" spellcheck="false">
+    </form>
+    <div class="rp-sep"></div>
+    ${rpOpts}
+  </div>
+</div>
 <div id="sumReady">${roleMap[defaultSlug]}</div>`;
 
   // ---- rail: comments + suggestions -----------------------------------------
@@ -594,9 +595,6 @@ ${rolebar}
   .page [id^="blk-"].blk-flash{animation:blkflash 1.5s ease}
   @keyframes blkflash{0%,100%{background:transparent}12%{background:var(--seal-soft)}}
   /* summary surface */
-  .summary .stag{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--ink-soft);background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:6px 12px}
-  .summary .stag .icon{width:14px;height:14px;color:var(--ink-soft)}
-  .summary .stag b{font-weight:600;color:var(--ink)}
   .summary .lead{font-size:18px;line-height:1.55;color:var(--ink);margin:16px 0 0;font-weight:400}
   .summary .lead b,.summary .lead strong{font-weight:600}
   .summary h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--muted);margin:24px 0 4px}
@@ -616,32 +614,27 @@ ${rolebar}
   .rsh{font-weight:650;font-size:14px;color:var(--ink)}
   .rsd{font-size:14px;color:var(--ink-soft);margin-top:2px;line-height:1.5}
   .rsd b,.rsd strong{color:var(--ink);font-weight:600}
-  /* role switcher */
-  .rolebar{display:flex;align-items:center;gap:9px;margin:14px 0 2px;flex-wrap:wrap}
-  .lensbox{display:flex;align-items:center;gap:6px;flex:1;min-width:0;max-width:340px}
-  .lensin{flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--panel)}
-  .lensin:focus{outline:none;border-color:var(--seal);box-shadow:0 0 0 3px var(--seal-soft)}
-  .lensin::placeholder{color:var(--muted);font-weight:500}
-  .lensgo{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);cursor:pointer}
-  .lensgo:hover{color:var(--seal);border-color:var(--seal)}
-  .lensgo .icon{width:16px;height:16px}
-  .rl-hint{font-size:12px;color:var(--muted)}
-  .lenspills{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
-  .lenspill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:999px;padding:4px 11px;cursor:pointer;line-height:1.4}
-  .lenspill:hover{color:var(--ink);border-color:var(--ink)}
-  .lenspill.on{color:#fff;background:var(--seal);border-color:var(--seal)}
-  .lenspill .pillx{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;font-size:13px;line-height:1;opacity:.55;margin-right:-3px}
-  .lenspill .pillx:hover{opacity:1;background:rgba(255,255,255,.18)}
-  .lenspill.on .pillx{color:#fff}
-  .lensdrop{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);cursor:pointer;font-size:12px}
-  .lensdrop:hover{color:var(--seal);border-color:var(--seal)}
-  .lensmenu{position:fixed;z-index:96;min-width:210px;max-height:300px;overflow:auto;background:var(--paper);border:1px solid var(--line-strong);border-radius:var(--r-md);box-shadow:var(--shadow-pop);padding:4px}
-  .lensmenu[hidden]{display:none}
-  .lensmenu .mi{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-radius:var(--r-sm);cursor:pointer;font-size:13px;color:var(--ink)}
-  .lensmenu .mi:hover{background:var(--panel-hover)}
-  .lensmenu .mi.added{color:var(--muted)}
-  .lensmenu .mi .tick{color:var(--seal);font-size:12px}
-  .lensmenu .mhd{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 10px 3px}
+  /* role switcher — inline .rolepick dropdown */
+  .rolepick{position:relative;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:13px;color:var(--muted)}
+  .rolepick .rp-spark{width:15px;height:15px;color:var(--seal);flex-shrink:0}
+  .rp-pre{font-weight:500}
+  .rp-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;border-radius:var(--r-pill);border:1px solid var(--line-strong);background:var(--panel);color:var(--ink);font:inherit;font-weight:600;cursor:pointer;transition:background var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease)}
+  .rp-btn:hover{background:var(--panel-hover);border-color:var(--seal-line)}
+  .rp-btn[aria-expanded="true"]{border-color:var(--seal);background:var(--seal-soft)}
+  .rp-car{width:15px;height:15px;color:var(--muted);transition:transform var(--t-fast) var(--ease)}
+  .rp-btn[aria-expanded="true"] .rp-car{transform:rotate(180deg)}
+  .rp-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:50;min-width:236px;background:var(--paper);border:1px solid var(--line-strong);border-radius:var(--r-lg,12px);box-shadow:var(--shadow-pop);padding:6px}
+  .rp-menu[hidden]{display:none}
+  .rp-opt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:var(--r-md);font:inherit;font-size:13.5px;color:var(--ink-soft);cursor:pointer}
+  .rp-opt:hover{background:var(--panel-hover);color:var(--ink)}
+  .rp-opt::before{content:"";width:7px;height:7px;border-radius:50%;flex-shrink:0;box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+  .rp-opt.is-on{color:var(--ink);font-weight:600}
+  .rp-opt.is-on::before{background:var(--seal);box-shadow:none}
+  .rp-sep{height:1px;background:var(--line);margin:6px 4px}
+  .rp-custom{display:flex;align-items:center;gap:9px;padding:5px 10px}
+  .rp-custom svg{width:14px;height:14px;color:var(--muted);flex-shrink:0}
+  .rp-custom input{flex:1;min-width:0;border:0;background:none;font:inherit;font-size:13.5px;color:var(--ink);padding:3px 0}
+  .rp-custom input::placeholder{color:var(--faint)}
   .rolenote{background:var(--amber-soft);color:var(--amber);border-radius:8px;padding:7px 11px;font-size:12.5px;margin:8px 0;display:flex;align-items:center;gap:8px}
   .rolenote b{font-weight:600}
   .rolenote .copycmd{white-space:nowrap;flex-shrink:0}
@@ -1003,7 +996,7 @@ function setPane(name){
 }
 document.getElementById('railSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setPane(b.dataset.pane);});
 
-// ---- role switcher ----
+// ---- role switcher (inline .rolepick dropdown) ----
 function slugifyRole(s){return String(s==null?'':s).toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,64);}
 function nearestRole(input){
   const want=slugifyRole(input); const keys=Object.keys(SEAL.summaries);
@@ -1013,99 +1006,80 @@ function nearestRole(input){
   return {hit:best||keys[0],exact:false};
 }
 function labelFor(slug){return SEAL.labels[slug]||slug.replace(/_/g,' ').replace(/\\b\\w/g,c=>c.toUpperCase());}
-function clearAfterPills(){
-  const host=document.getElementById('docSummary');const pills=host.querySelector('.lenspills');
-  let n=pills.nextSibling;while(n){const x=n;n=n.nextSibling;x.remove();}
-  return {host,pills};
+// The .rolepick header is stable; the summary body (#sumReady) and any role-note are
+// hot-swapped. clearAfterPicker() drops everything after the .rolepick so a fresh
+// body can be appended, mirroring the old clearAfterPills() but anchored on .rolepick.
+function clearAfterPicker(){
+  const host=document.getElementById('docSummary');const pick=host.querySelector('.rolepick');
+  if(!pick)return{host,pick:null};
+  let n=pick.nextSibling;while(n){const x=n;n=n.nextSibling;x.remove();}
+  return {host,pick};
 }
-function setStag(label){const b=document.querySelector('#docSummary .stag b');if(b)b.textContent=label;}
-function setLensValue(label){const i=document.getElementById('roleInput');if(i)i.value=label+' summary';}
+// Reflect the active role in the picker: button label + the listbox dot.
+function setActiveRole(slug,label){
+  const cur=document.querySelector('#docSummary .rp-cur');if(cur)cur.textContent=label;
+  document.querySelectorAll('#docSummary .rp-opt').forEach(o=>o.classList.toggle('is-on',o.dataset.role===slug));
+}
+function escapeText(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escapeAttr(s){return escapeText(s).replace(/"/g,'&quot;');}
-// ---- sticky, user-editable role pills (persisted per doc) ----
-const PILLS_KEY='seal-pills3:'+(SEAL.docPath||'');
-function defaultPills(){const out=[],seen=new Set();
-  // ONLY roles that actually have a generated summary, plus General. We do NOT
-  // seed the full role taxonomy — typing a new role hands you a paste command
-  // (it doesn't auto-generate a pill). Users still prune with ×.
-  ['general',SEAL.defaultSlug].concat(Object.keys(SEAL.summaries))
-    .forEach(x=>{if(x&&!seen.has(x)){seen.add(x);out.push(x);}});return out;}
-function loadPills(){try{const v=JSON.parse(localStorage.getItem(PILLS_KEY));if(Array.isArray(v)&&v.length)return v;}catch(e){}return defaultPills();}
-let pillSlugs=loadPills();
-function savePills(){try{localStorage.setItem(PILLS_KEY,JSON.stringify(pillSlugs))}catch(e){}}
-function ensurePill(slug){if(slug&&!pillSlugs.includes(slug)){pillSlugs.push(slug);savePills();}}
-function renderPills(active){
-  const host=document.getElementById('lensPills');if(!host)return;
-  host.innerHTML=pillSlugs.map(slug=>{const label=labelFor(slug);const rm=slug!=='general';
-    return '<button type="button" class="lenspill'+(slug===active?' on':'')+'" data-role="'+slug+'" data-label="'+escapeAttr(label)+'">'+escapeText(label)+(rm?'<span class="pillx" data-remove="'+slug+'" title="Remove">×</span>':'')+'</button>';}).join('');
-}
-function activeSlug(){const a=document.querySelector('#docSummary .lenspill.on');return a?a.dataset.role:null;}
-function removePill(slug){const wasActive=activeSlug()===slug;pillSlugs=pillSlugs.filter(s=>s!==slug);savePills();
-  if(wasActive)applyRole(pillSlugs.includes('general')?'general':(pillSlugs[0]||'general'));else renderPills(activeSlug());}
 function applyRole(slug){
-  const {pills}=clearAfterPills();
+  const {pick}=clearAfterPicker();if(!pick)return;
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[slug]||'';
-  pills.parentNode.appendChild(wrap);
-  ensurePill(slug);renderPills(slug);setStag(labelFor(slug));setLensValue(labelFor(slug));
+  pick.parentNode.appendChild(wrap);
+  setActiveRole(slug,labelFor(slug));
   try{sessionStorage.setItem('seal-role',slug)}catch(e){}
 }
-// ---- ▾ dropdown: browse the full taxonomy, add a role as a pill ----
-const lensMenu=document.getElementById('lensMenu');
-function renderMenu(){
-  const tax=SEAL.taxonomy||[];
-  lensMenu.innerHTML='<div class="mhd">Add a role</div>'+tax.map(t=>{const added=pillSlugs.includes(t.slug);
-    return '<div class="mi'+(added?' added':'')+'" data-add="'+t.slug+'" data-label="'+escapeAttr(t.label)+'">'+escapeText(t.label)+(added?'<span class="tick">✓ added</span>':'')+'</div>';}).join('');
-}
-document.getElementById('lensMore').addEventListener('click',e=>{e.stopPropagation();
-  if(lensMenu.hidden){renderMenu();const r=e.currentTarget.getBoundingClientRect();
-    lensMenu.style.left=Math.max(8,Math.min(r.right-210,window.innerWidth-220))+'px';lensMenu.style.top=(r.bottom+4)+'px';lensMenu.hidden=false;}
-  else lensMenu.hidden=true;});
-document.addEventListener('click',e=>{if(!lensMenu.hidden&&!e.target.closest('#lensMenu')&&!e.target.closest('#lensMore'))lensMenu.hidden=true;});
-lensMenu.addEventListener('click',e=>{const it=e.target.closest('.mi');if(!it)return;lensMenu.hidden=true;
-  const slug=it.dataset.add,label=it.dataset.label;ensurePill(slug);
-  if(SEAL.summaries[slug])applyRole(slug);else gotoRole(label);});
 // No live generation, no spinner, no polling: hand the user the EXACT command to
 // paste into their AI session. The tailored summary appears here after they run
 // it and the page re-renders. Show the nearest baked summary meanwhile.
 function showPasteCommand(label,near){
-  const {pills}=clearAfterPills();
+  const {pick}=clearAfterPicker();if(!pick)return;
   const cmd='/sealmd:seal-role "'+label+'"';
   const note=document.createElement('div');note.className='rolenote';
   note.innerHTML='<span>No <b>'+escapeText(label)+'</b> summary yet. Paste this into your AI session (Claude Code) to generate one — it shows up here after you run it. Meanwhile you\\'re seeing <b>'+escapeText(labelFor(near))+'</b>.</span>'+
     '<code class="pastecmd">'+escapeText(cmd)+'</code>'+
     '<button class="btn ghost tiny copycmd" data-copycmd="'+escapeAttr(cmd)+'">Copy</button>';
-  pills.after(note);
+  pick.after(note);
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[near]||'';
-  pills.parentNode.appendChild(wrap);
-  setStag(label);setLensValue(label);
+  pick.parentNode.appendChild(wrap);
+  setActiveRole(near,label);
 }
-function escapeText(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+// The single role-switch entry point (reused by .rp-opt clicks and #lensForm submit).
 function gotoRole(raw){
-  const label=raw.trim();if(!label)return;
+  const label=String(raw||'').trim();if(!label)return;
   const {hit,exact}=nearestRole(label);
   if(exact){applyRole(hit);return;}
   // Unknown role: no auto-generation. Hand over the paste command (both serve
   // and static) and show the nearest baked summary meanwhile.
   showPasteCommand(label,hit);
 }
+// ---- .rolepick open/close + option select ----
+function closeRolePick(){const m=document.querySelector('#docSummary .rp-menu:not([hidden])');
+  if(m){m.setAttribute('hidden','');const b=m.parentNode.querySelector('.rp-btn');if(b)b.setAttribute('aria-expanded','false');}}
+document.getElementById('docSummary').addEventListener('click',e=>{
+  const btn=e.target.closest('.rp-btn');
+  if(btn){const menu=btn.parentNode.querySelector('.rp-menu');if(!menu)return;
+    const willOpen=menu.hasAttribute('hidden');
+    if(willOpen){menu.removeAttribute('hidden');btn.setAttribute('aria-expanded','true');}
+    else{menu.setAttribute('hidden','');btn.setAttribute('aria-expanded','false');}return;}
+  const opt=e.target.closest('.rp-opt');
+  if(opt){closeRolePick();
+    const slug=opt.dataset.role, label=opt.textContent.trim();
+    if(SEAL.summaries[slug]) applyRole(slug);   // pre-generated -> instant
+    else gotoRole(label);                        // taxonomy role -> nearest baked + paste cmd
+    return;}
+});
+// custom "type a role" field (#lensForm / #roleInput) — existing submit path
 document.getElementById('docSummary').addEventListener('submit',e=>{
   if(!e.target.closest('#lensForm'))return;e.preventDefault();
-  const raw=document.getElementById('roleInput').value.replace(/\\s+summary$/i,'').trim();
-  gotoRole(raw);
+  closeRolePick();
+  gotoRole(document.getElementById('roleInput').value);
 });
-document.getElementById('docSummary').addEventListener('click',e=>{
-  const rm=e.target.closest('.pillx');
-  if(rm){e.stopPropagation();removePill(rm.dataset.remove);return;}
-  const pill=e.target.closest('.lenspill');
-  if(pill&&!pill.classList.contains('on')){
-    const slug=pill.dataset.role, label=pill.dataset.label||labelFor(slug);
-    if(SEAL.summaries[slug]) applyRole(slug);   // pre-generated -> instant
-    else gotoRole(label);                        // taxonomy role -> generate (serve) / nearest (static)
-    return;
-  }
-});
-// initial pill render
-renderPills(SEAL.defaultSlug);
+// close on outside-click and Escape
+document.addEventListener('click',e=>{if(!e.target.closest('.rolepick'))closeRolePick();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeRolePick();});
+// The active role + its summary body render server-side; no initial JS pass needed.
 
 // ---- bidirectional anchor <-> comment focus ----
 function cleanQuote(s){return String(s||'').replace(/[*_\`]/g,'').replace(/\\s+/g,' ').trim();}
