@@ -394,12 +394,10 @@ export function renderReviewPage({
   // ---- role data: key everything by slug(label) -----------------------------
   const roleMap = {};   // slug -> ready inner html
   const roleLabels = {}; // slug -> human label
-  const roleHashes = {}; // slug -> the doc hash the summary was written for (drift)
   for (const r of roles) {
     const slug = slugifyRole(r.role) || 'general';
     roleMap[slug] = summaryReadyInner(r, wordCount, isGeneric);
     roleLabels[slug] = r.role;
-    roleHashes[slug] = r.source_hash || null;
   }
   const defaultLabel = reviewerRole || roles[0].role;
   const defaultSlug = slugifyRole(defaultLabel) || slugifyRole(roles[0].role) || 'general';
@@ -448,8 +446,16 @@ export function renderReviewPage({
   // the role digest. Empty/no-baseline → "up to date". Re-renders on summary_sig.
   const chg = changes && Array.isArray(changes.items) ? changes.items.slice(0, 8) : [];
   const kindLabel = { added: 'Added', removed: 'Removed', modified: 'Edited' };
+  const sevLabel = { high: 'High', med: 'Medium', low: 'Low' };
   let _bn = 0;
-  const briefItems = chg.map((i) => `<div class="bchg ${i.sev}"><span class="bchg-n">${++_bn}</span><div class="bchg-bd"><div class="bchg-h">${escapeHtml(String(i.heading || ''))}</div><span class="bchg-sev ${i.sev}">${kindLabel[i.kind] || 'Changed'}</span></div></div>`).join('');
+  const briefItems = chg.map((i) => {
+    const jump = i.src ? ` data-src="${escapeHtml(i.src)}" tabindex="0" role="button" title="Jump to this section in the Full doc"` : '';
+    let delta = '';
+    if (i.kind === 'added') delta = i.after ? `<div class="bchg-delta"><span class="bchg-new">${escapeHtml(i.after)}</span></div>` : '';
+    else if (i.kind === 'removed') delta = i.before ? `<div class="bchg-delta"><span class="bchg-old">${escapeHtml(i.before)}</span></div>` : '';
+    else if (i.before || i.after) delta = `<div class="bchg-delta">${i.before ? `<span class="bchg-old">${escapeHtml(i.before)}</span> ` : ''}${i.after ? `<span class="bchg-new">${escapeHtml(i.after)}</span>` : ''}</div>`;
+    return `<div class="bchg ${i.sev}${i.src ? ' hassrc' : ''}"${jump}><span class="bchg-n">${++_bn}</span><div class="bchg-bd"><div class="bchg-h">${escapeHtml(String(i.heading || ''))}${i.src ? '<span class="bchg-jump" aria-hidden="true">↪</span>' : ''}</div>${delta}<span class="bchg-sev ${i.sev}">${kindLabel[i.kind] || 'Changed'} · ${sevLabel[i.sev] || ''}</span></div></div>`;
+  }).join('');
   const briefBody = briefItems
     ? `<div class="bchglist">${briefItems}</div>`
     : (changes && changes.hasBaseline
@@ -475,7 +481,7 @@ export function renderReviewPage({
 
   // ---- client data ----------------------------------------------------------
   const SEAL_JS_DATA = JSON.stringify({
-    summaries: roleMap, labels: roleLabels, summaryHashes: roleHashes, defaultSlug, title: title || srcName, owner: owner || null,
+    summaries: roleMap, labels: roleLabels, defaultSlug, title: title || srcName, owner: owner || null,
     docPath, enginePath, srcName, mode, wordCount, contentHash,
     people: Array.isArray(people) ? people : [],
     taxonomy: taxonomy.map((t) => ({ slug: t.slug, label: t.label })),
@@ -705,6 +711,13 @@ export function renderReviewPage({
   .bchg{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--paper)}
   .bchg.high{border-left:3px solid var(--sev-high,#b3334c)}
   .bchg.med{border-left:3px solid var(--amber,#d9a800)}
+  .bchg.low{border-left:3px solid var(--ink-soft)}
+  .bchg.hassrc{cursor:pointer}
+  .bchg.hassrc:hover{border-color:var(--seal);box-shadow:0 0 0 1px var(--seal)}
+  .bchg-jump{margin-left:5px;color:var(--seal);font-size:11px}
+  .bchg-delta{font-size:11.5px;line-height:1.45;margin-top:5px}
+  .bchg-old{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--del,#b3334c)}
+  .bchg-new{color:var(--ink-soft);box-shadow:inset 0 -2px 0 var(--ins,#cfe8cf)}
   .bchg-n{flex-shrink:0;width:18px;height:18px;border-radius:50%;background:var(--ink-soft);color:var(--paper);font-size:10px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;margin-top:1px}
   .bchg-bd{min-width:0;flex:1}
   .bchg-h{font-size:12.5px;line-height:1.4;color:var(--ink)}
@@ -732,8 +745,6 @@ export function renderReviewPage({
   #cmtAuthor:focus{border-color:var(--seal)}
   .cmt-summary-hint{margin-top:7px;font-size:11.5px;line-height:1.45;color:var(--muted)}
   .linkbtn{border:0;background:none;padding:0;font:inherit;color:var(--seal);cursor:pointer;text-decoration:underline}
-  .sumstale{margin:10px 0 4px;padding:9px 12px;font-size:12.5px;line-height:1.45;color:var(--ink-soft);background:color-mix(in srgb,#d9a800 16%,var(--paper));border:1px solid color-mix(in srgb,#d9a800 40%,var(--line));border-radius:var(--r-sm)}
-  .sumstale-hint{color:var(--muted);font-size:11.5px}
   .cmt-summary-hint .linkbtn{font-size:inherit}
   /* once a passage is pinned the comment is already anchored — drop the hint */
   .cmt-compose:has(.cmt-quote:not([hidden])) .cmt-summary-hint{display:none}
@@ -1079,29 +1090,7 @@ function applyRole(slug){
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[slug]||'';
   pick.parentNode.appendChild(wrap);
   setActiveRole(slug,labelFor(slug));
-  placeStale(pick,slug);
   try{sessionStorage.setItem('seal-role',slug)}catch(e){}
-}
-// Drift badge: a brief whose source_hash != the live doc hash (older doc version).
-// Re-injected per role switch (clearAfterPicker wipes prior siblings). serve only.
-function isStale(slug){const h=SEAL.summaryHashes&&SEAL.summaryHashes[slug];return !!(h&&SEAL.contentHash&&h!==SEAL.contentHash);}
-function placeStale(pick,slug){
-  var ex=document.getElementById('sumStale');if(ex)ex.remove();
-  if(SEAL.mode!=='serve'||!isStale(slug)||!pick)return;
-  var d=document.createElement('div');d.className='sumstale';d.id='sumStale';
-  d.innerHTML='⚠ This brief reflects an earlier version of the doc — it has changed since. <button type="button" class="linkbtn" id="sumUpdate">Copy refresh command</button> <span class="sumstale-hint">→ paste into Claude Code</span>';
-  pick.after(d);
-  var btn=d.querySelector('#sumUpdate');if(btn)btn.onclick=function(){requestSummaryUpdate(slug,btn);};
-}
-async function requestSummaryUpdate(slug,btn){
-  const label=labelFor(slug);
-  const cmd='/sealmd:seal-role "'+label+'"';
-  // Notify any agent watching the serve task (durable queue + event) AND hand the
-  // user the command to run it themselves — regenerating a brief needs an AI, so a
-  // silent request that no one is watching would just look broken.
-  try{fetch('/api/summary',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:label,regenerate:true})});}catch(e){}
-  try{await navigator.clipboard.writeText(cmd);toast('Copied “'+cmd+'” — paste into Claude Code to refresh this brief');}
-  catch(e){toast('Run in Claude Code to refresh: '+cmd);}
 }
 // No live generation, no spinner, no polling: hand the user the EXACT command to
 // paste into their AI session. The tailored summary appears here after they run
@@ -1117,7 +1106,6 @@ function showPasteCommand(label,near){
   const wrap=document.createElement('div');wrap.id='sumReady';wrap.innerHTML=SEAL.summaries[near]||'';
   pick.parentNode.appendChild(wrap);
   setActiveRole(near,label);
-  placeStale(pick,near);
 }
 
 // The single role-switch entry point (reused by .rp-opt clicks and #lensForm submit).
@@ -1638,7 +1626,6 @@ try{
   const pn=sessionStorage.getItem('seal-pane');if(pn){setPane(pn);sessionStorage.removeItem('seal-pane');}
   const rr=sessionStorage.getItem('seal-role');
   if(rr&&SEAL.summaries[rr])applyRole(rr);
-  else{var _pk=document.querySelector('#docSummary .rolepick');placeStale(_pk,SEAL.defaultSlug);}
   const scp=sessionStorage.getItem('seal-scroll');if(scp!==null){window.scrollTo(0,+scp);sessionStorage.removeItem('seal-scroll');}
 }catch(e){}
 </script>

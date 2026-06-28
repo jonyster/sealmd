@@ -18,9 +18,11 @@ test('Change Brief lists edited/added/removed sections since the brief baseline'
     runSeal(['render', '--in', ws.doc], { cwd: ws.dir });
     const html = ws.read('doc.review.html');
 
-    assert.match(html, /bchg-sev high">Added/, 'added section → High');
-    assert.match(html, /bchg-sev high">Removed/, 'removed section → High');
-    assert.match(html, /bchg-sev med">Edited/, 'modified section → Med');
+    assert.match(html, /bchg-sev high">Added · High/, 'added section → High');
+    assert.match(html, /bchg-sev high">Removed · High/, 'removed section → High');
+    assert.match(html, /bchg-sev (low|med)">Edited/, 'modified section → Med/Low by size');
+    assert.match(html, /<span class="bchg-old">ship it\.<\/span> <span class="bchg-new">ship it FASTER\.<\/span>/, 'before → after delta');
+    assert.match(html, /class="bchg [a-z]+ hassrc" data-src="blk-\d+"/, 'item links to the section in the Full doc');
     assert.match(html, /changes since this brief/, 'header counts the changes');
   } finally { ws.cleanup(); }
 });

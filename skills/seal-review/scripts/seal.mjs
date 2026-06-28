@@ -139,13 +139,29 @@ function docChanges(doc) {
   if (base === cur) return { hasBaseline: true, items: [] };
   const A = splitSections(base), B = splitSections(cur);
   const ah = new Map(A.map((s) => [s.heading, s.body])), bh = new Map(B.map((s) => [s.heading, s.body]));
+  // heading → blk-N (jump target into the Full doc), from the CURRENT render blocks
+  const blkOf = new Map();
+  try { for (const b of markdownBlocks(cur)) if (/^h[1-6]$/.test(b.tag)) blkOf.set(b.text.trim(), b.blk); } catch {}
+  const snip = (s, n = 150) => { s = String(s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };
+  // line-level before/after: lines present in one side but not the other
+  const lineDelta = (o, n) => {
+    const ol = o.split('\n').map((x) => x.trim()).filter(Boolean), nl = n.split('\n').map((x) => x.trim()).filter(Boolean);
+    const os = new Set(ol), ns = new Set(nl);
+    return { before: ol.filter((l) => !ns.has(l)), after: nl.filter((l) => !os.has(l)) };
+  };
   const items = [];
   for (const s of B) {
-    if (!ah.has(s.heading)) items.push({ heading: s.heading, kind: 'added', sev: 'high' });
-    else if (ah.get(s.heading) !== s.body) items.push({ heading: s.heading, kind: 'modified', sev: 'med' });
+    const src = blkOf.get(s.heading) || null;
+    if (!ah.has(s.heading)) items.push({ heading: s.heading, kind: 'added', sev: 'high', src, after: snip(s.body) });
+    else if (ah.get(s.heading) !== s.body) {
+      const d = lineDelta(ah.get(s.heading), s.body);
+      const n = d.before.length + d.after.length;
+      items.push({ heading: s.heading, kind: 'modified', sev: n > 4 ? 'med' : 'low', src, before: snip(d.before.join(' ')), after: snip(d.after.join(' ')) });
+    }
   }
-  for (const s of A) if (!bh.has(s.heading)) items.push({ heading: s.heading, kind: 'removed', sev: 'high' });
-  items.sort((x, y) => (x.sev === 'high' ? 0 : 1) - (y.sev === 'high' ? 0 : 1));
+  for (const s of A) if (!bh.has(s.heading)) items.push({ heading: s.heading, kind: 'removed', sev: 'high', src: null, before: snip(s.body) });
+  const rank = { high: 0, med: 1, low: 2 };
+  items.sort((x, y) => rank[x.sev] - rank[y.sev]);
   return { hasBaseline: true, items };
 }
 function readSummaryRoles(doc) {
