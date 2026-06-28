@@ -1067,12 +1067,14 @@ function placeStale(pick,slug){
   var btn=d.querySelector('#sumUpdate');if(btn)btn.onclick=function(){requestSummaryUpdate(slug,btn);};
 }
 async function requestSummaryUpdate(slug,btn){
-  if(!ONLINE){toast('Disconnected — reconnect seal serve');return;}
-  if(btn){btn.disabled=true;btn.textContent='Updating…';}
-  try{const j=await(await fetch('/api/summary',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:labelFor(slug),regenerate:true})})).json();
-    toast(j&&j.ok?'Asked your agent to refresh this brief — it updates here when done':'Error: '+((j&&j.error)||'failed'));}
-  catch(e){toast('Error: '+e.message);}
-  if(btn){btn.disabled=false;btn.textContent='Update now';}
+  const label=labelFor(slug);
+  const cmd='/sealmd:seal-role "'+label+'"';
+  // Notify any agent watching the serve task (durable queue + event) AND hand the
+  // user the command to run it themselves — regenerating a brief needs an AI, so a
+  // silent request that no one is watching would just look broken.
+  try{fetch('/api/summary',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({role:label,regenerate:true})});}catch(e){}
+  try{await navigator.clipboard.writeText(cmd);toast('Copied “'+cmd+'” — paste into Claude Code to refresh this brief');}
+  catch(e){toast('Run in Claude Code to refresh: '+cmd);}
 }
 // No live generation, no spinner, no polling: hand the user the EXACT command to
 // paste into their AI session. The tailored summary appears here after they run
@@ -1275,19 +1277,19 @@ function setOnline(on){
   if(!on)toast('Disconnected — comments paused until seal serve is back');
   else toast('Reconnected');
 }
-// last doc hash the page is showing; updated whenever liveRefresh pulls fresh markup
+// last doc hash + summary signature the page is showing
 let SEEN_HASH=SEAL.contentHash;
+let SEEN_SUM=null;   // first poll seeds it (no reload on the seed)
 async function pingServe(){
   try{
     const r=await fetch('/api/state',{cache:'no-store',credentials:'same-origin'});setOnline(r.ok);
-    // doc.md edited on disk (any source: editor, agent, git) → pull the new render in-place.
-    // Guard on document.hidden so a backgrounded tab doesn't fight the user's active edits.
     const j=await r.json().catch(()=>null);
-    if(j&&j.hash&&j.hash!==SEEN_HASH&&!document.hidden){
-      // Doc content changed (git pull / agent / editor). A FULL reload is needed so
-      // the Summary/brief, drift badge, and SEAL.contentHash all update — liveRefresh
-      // only swaps the Full-doc body + comments. Preserve pane + scroll across it.
-      SEEN_HASH=j.hash;
+    if(j&&SEEN_SUM===null&&j.summary_sig!=null)SEEN_SUM=j.summary_sig;   // seed, don't reload
+    // Doc content OR a regenerated brief (summary_sig) → full reload so the Summary
+    // view, role brief, drift badge, and SEAL.contentHash all update (liveRefresh
+    // only swaps the Full-doc body + comments). Preserve pane + scroll across it.
+    if(j&&((j.hash&&j.hash!==SEEN_HASH)||(j.summary_sig!=null&&j.summary_sig!==SEEN_SUM))&&!document.hidden){
+      SEEN_HASH=j.hash;SEEN_SUM=j.summary_sig;
       try{var _p=document.querySelector('#railSeg button.on');if(_p)sessionStorage.setItem('seal-pane',_p.dataset.pane);sessionStorage.setItem('seal-scroll',String(window.scrollY));}catch(_){}
       window.__sealReloading=true;location.reload();
     }

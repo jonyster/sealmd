@@ -1254,7 +1254,10 @@ function cmdServe() {
       }
       if (req.method === 'GET' && url.pathname === '/api/state') {
         const { r } = loadSidecar(doc);
-        return J(res, 200, { ok: true, comments: r.comments.length, auto_commit: AUTO_COMMIT, hash: liveHash(doc) });
+        // summary_sig changes when a role brief is (re)generated, so the page reloads
+        // to show it even though the DOC hash is unchanged.
+        const sumSig = (() => { try { return contentHash(readFileSync(summaryFilePath(doc), 'utf8')); } catch { return ''; } })();
+        return J(res, 200, { ok: true, comments: r.comments.length, auto_commit: AUTO_COMMIT, hash: liveHash(doc), summary_sig: sumSig });
       }
       // commit + push the review from the page
       if (req.method === 'POST' && url.pathname === '/api/commit') {
