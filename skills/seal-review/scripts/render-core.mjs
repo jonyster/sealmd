@@ -32,6 +32,16 @@ export function escapeHtml(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+// Decode HTML entities to their characters so a title authored as "# &nbsp;X"
+// shows the space, not a literal "&nbsp;", once it passes back through escapeHtml.
+const NAMED_ENTITIES = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'", mdash: '—', ndash: '–', hellip: '…', copy: '©', reg: '®', trade: '™' };
+export function decodeEntities(s) {
+  return String(s).replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]*);/gi, (m, e) => {
+    if (e[0] === '#') { const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return Number.isFinite(n) ? String.fromCodePoint(n) : m; }
+    const k = e.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, k) ? NAMED_ENTITIES[k] : m;
+  });
+}
 const SAFE_URL = /^(https?:|mailto:|#|\/|\.\/|\.\.\/|[^:]*$)/i;
 function safeUrl(url) { return SAFE_URL.test(url.trim()) ? url : '#blocked-unsafe-url'; }
 
@@ -361,6 +371,7 @@ export function renderReviewPage({
   canCommit = false, gitRemote = null, autoCommit = false, dirty = false, canPR = false,
   mdRaw, contentHash, wordCount, comments = [], renderedAt = '', mode = 'static', token = '', generic = false,
 }) {
+  title = decodeEntities(title);   // "# &nbsp;X" → space, not a literal "&nbsp;"
   const isGeneric = generic || !roles.length;   // auto-derived summary, not agent-tailored
   if (!roles.length) roles = [{ role: 'General', ...deriveSummary(mdRaw, wordCount) }];
 

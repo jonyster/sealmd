@@ -373,6 +373,15 @@ test('share nudge shows only when serve + remote + dirty + not auto-committing',
   assert.ok(!present(renderReviewPage(minimalOpts({ mode: 'serve', gitRemote: null, canCommit: true, dirty: true }))), 'no remote → absent');
 });
 
+test('title HTML entities are decoded, not shown literally', () => {
+  const html = renderReviewPage(minimalOpts({ title: '&nbsp;sealmd' }));
+  assert.ok(!html.includes('&amp;nbsp;'), 'no double-escaped entity');
+  assert.ok(html.includes(' sealmd'), 'nbsp decoded to its character');
+  // entity-encoded markup still cannot inject (decode → escapeHtml re-escapes)
+  const xss = renderReviewPage(minimalOpts({ title: '&lt;img src=x onerror=alert(1)&gt;' }));
+  assert.ok(!/<img src=x/.test(xss), 'decoded angle brackets are re-escaped');
+});
+
 test('renderReviewPage embeds the title and the content hash', () => {
   const html = renderReviewPage(minimalOpts());
   assert.ok(html.includes('My Spec'));
