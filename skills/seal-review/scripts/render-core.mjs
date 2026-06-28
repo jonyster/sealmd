@@ -1283,7 +1283,14 @@ async function pingServe(){
     // doc.md edited on disk (any source: editor, agent, git) → pull the new render in-place.
     // Guard on document.hidden so a backgrounded tab doesn't fight the user's active edits.
     const j=await r.json().catch(()=>null);
-    if(j&&j.hash&&j.hash!==SEEN_HASH&&!document.hidden){SEEN_HASH=j.hash;toast('Document changed — refreshed');await liveRefresh();}
+    if(j&&j.hash&&j.hash!==SEEN_HASH&&!document.hidden){
+      // Doc content changed (git pull / agent / editor). A FULL reload is needed so
+      // the Summary/brief, drift badge, and SEAL.contentHash all update — liveRefresh
+      // only swaps the Full-doc body + comments. Preserve pane + scroll across it.
+      SEEN_HASH=j.hash;
+      try{var _p=document.querySelector('#railSeg button.on');if(_p)sessionStorage.setItem('seal-pane',_p.dataset.pane);sessionStorage.setItem('seal-scroll',String(window.scrollY));}catch(_){}
+      window.__sealReloading=true;location.reload();
+    }
   }
   catch(_){setOnline(false);}
 }
