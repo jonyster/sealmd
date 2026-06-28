@@ -1,0 +1,27 @@
+{
+  "roles": [
+    {
+      "role": "Eng",
+      "lead": "sealmd is a zero-dependency, fully-local Markdown review tool. Two committed files per doc — doc.md and doc.seal.md (a human-readable Markdown sidecar whose records are structured JSON). A Node CLI (seal.mjs) runs a loopback-bound, token-authenticated server that serves a review page; the page writes the sidecar directly and streams SEAL_EVENTs back to the agent for role-tailored summaries. Git is the transport; sign-off is a normal GitHub PR via the local gh CLI. No backend, no telemetry. From an eng lens: review the trust model (self-asserted authors, editable sidecar), the local server's security posture, and the data/notification boundaries.",
+      "key_decisions": [
+        "Git is the source of truth and transport — accepted suggestions rewrite doc.md and commit back; the tool invents no approval state of its own (sign-off = GitHub PR).",
+        "Local-only architecture: server binds 127.0.0.1, token-authenticates every action; the generated *.review.html makes no network calls of its own.",
+        "Sidecar (doc.seal.md) is editable plaintext, not cryptographic — git diff/history is the audit trail. Verified identity is deferred to the paid hosted `seal publish` tier.",
+        "Zero runtime dependencies, Node ≥18 — engine is a single plain CLI driving Claude Code / Cursor / Codex / Copilot, each via its own instruction file pointing at AGENTS.md."
+      ],
+      "relevant_sections": [
+        "The model — three-file layout (doc.md committed, doc.seal.md committed, doc.review.html generated+gitignored); JSON-block records.",
+        "How the live review works — mermaid flow: browser → serve (loopback) → writes files → git/PR; SEAL_EVENT ⇄ agent summaries; share via MCP.",
+        "What it does — and doesn't — explicit non-guarantees: no identity verification, mutable sidecar, no own approval state, no delivery guarantee.",
+        "Data handling — opt-in-only outbound (Slack/Teams webhook, Email via Resend key, Share via MCP/gh); secrets in gitignored *.seal.notify.json."
+      ],
+      "needs_attention": [
+        "Server security: loopback bind + per-action token is the whole boundary while `seal serve` runs. Confirm token generation/rotation and that no action is reachable unauthenticated.",
+        "Accept rewrites doc.md from a browser-originated suggestion — verify the write path is anchored safely and can't be abused to inject arbitrary content beyond the suggested span.",
+        "Sidecar is a JSON-in-Markdown parse target — malformed or hand-edited blocks should fail safe, not corrupt review state. Worth checking parser robustness.",
+        "Offline guarantee is scoped to the generated HTML file only; external images/links embedded in the doc still load on open. Flag if that matters for sensitive docs.",
+        "Notification secrets live in *.seal.notify.json (gitignored) — confirm .gitignore is written on init so keys never get committed."
+      ]
+    }
+  ]
+}
