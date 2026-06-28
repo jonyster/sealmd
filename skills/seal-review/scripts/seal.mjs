@@ -911,7 +911,8 @@ function corePostReviewComments(doc, git, { prUrl, head, base }) {
     for (const { c, line } of leftover) {
       const loc = line ? `line ${line}` : 'document';
       const kind = c.suggestion != null ? 'Suggestion' : 'Comment';
-      L.push(`- **${kind}** · _${loc}_ · on “${(c.anchor || {}).quote || ''}”`);
+      const by = c.author ? ` by **${c.author}**` : '';
+      L.push(`- **${kind}**${by} · _${loc}_ · on “${(c.anchor || {}).quote || ''}”`);
       if (c.body) L.push(`  - ${c.body}`);
       if (c.suggestion != null) L.push(`  - _suggested replacement:_ \`${String(c.suggestion).replace(/`/g, '​`')}\``);
       for (const t of (c.thread || [])) L.push(`    - ↳ **${t.author || '?'}**: ${t.body || ''}`);
@@ -1365,6 +1366,23 @@ function cmdServe() {
     console.error(`Posts write ${sidecarPath(doc)} via the same fail-loud engine. Events stream to stdout for the AI console.`);
     if (notifyEnabled(ncfg)) console.error(`Notifications ON → ${[ncfg.slack && 'slack', ncfg.teams && 'teams', ncfg.email.resendKey && 'email'].filter(Boolean).join(', ')}${ncfg.digestInterval ? ` (digest every ${ncfg.digestInterval}s)` : ''}`);
     emitEvent({ type: 'serve_started', url: u, doc });
+    // Auto-pull GitHub PR replies back into the sidecar so the live page reflects
+    // them with no manual `seal pull`. Best-effort: silent when there's no PR /
+    // gh isn't ready. `--pull-interval 0` disables. ponytail: corePull is sync
+    // (blocking gh calls) like autoCommit already is — fine at a 45s cadence; move
+    // to async if a serve ever needs sub-second responsiveness during a pull.
+    const pullSecs = parseInt(arg('pull-interval') || '45', 10);
+    if (pullSecs > 0 && ghReady()) {
+      let pulling = false;
+      const pullTick = () => {
+        if (pulling) return; pulling = true;
+        try { const r = corePull(doc, {}); if (r.imported || r.resolved) emitEvent({ type: 'pr_synced', imported: r.imported, resolved: r.resolved, pr: r.pr, doc, hint: 'pulled new GitHub PR comments into the review' }); }
+        catch { /* no PR yet / transient — retry next tick */ }
+        finally { pulling = false; }
+      };
+      const iv = setInterval(pullTick, pullSecs * 1000); iv.unref && iv.unref();
+      const kick = setTimeout(pullTick, 3000); kick.unref && kick.unref();
+    }
     if (flag('open') || START_OPEN) {
       const cmd = process.platform === 'darwin' ? ['open', [u]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', u]] : ['xdg-open', [u]];
       try { spawn(cmd[0], cmd[1], { detached: true, stdio: 'ignore' }).unref(); } catch {}

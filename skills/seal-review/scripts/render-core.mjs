@@ -749,7 +749,7 @@ export function renderReviewPage({
   body.view-full #paneComments .cmt-compose,body.view-full #paneComments #railEmpty{display:none}
   body.view-full #paneComments .sg-sec{position:relative;z-index:7;margin-bottom:10px}
   body.view-full #cards{position:relative;padding:6px 0}
-  body.view-full #cards>.card[data-anchor]{position:absolute;left:0;right:0;margin:0;box-shadow:var(--shadow-card);transition:top .16s ease,box-shadow var(--t-fast) ease}
+  body.view-full #cards>.card{position:absolute;left:0;right:0;margin:0;box-shadow:var(--shadow-card);transition:top .16s ease,box-shadow var(--t-fast) ease}
   body.view-full #cards>.card.cur{z-index:6;box-shadow:0 0 0 2px var(--seal),var(--shadow-pop)}
   .card.flash{animation:cardflash 1s ease}
   @keyframes cardflash{0%,100%{box-shadow:var(--shadow-card)}25%{box-shadow:0 0 0 2px var(--seal)}}
@@ -1132,7 +1132,10 @@ function highlightAnchors(){
 function alignCards(){
   if(!cardsEl)return;
   var topCards=[];var k=cardsEl.children;
-  for(var i=0;i<k.length;i++){if(k[i].classList&&k[i].classList.contains('card')&&k[i].getAttribute('data-anchor')&&k[i].offsetParent!==null)topCards.push(k[i]);}
+  // ALL cards (anchored + unanchored) participate: anchored ones align to their
+  // anchor line; unanchored (want<0) stack at the top. Both share the collision
+  // cursor below, so an absolute anchored card never lands on an unanchored one.
+  for(var i=0;i<k.length;i++){if(k[i].classList&&k[i].classList.contains('card')&&k[i].offsetParent!==null)topCards.push(k[i]);}
   if(!body.classList.contains('view-full')){cardsEl.style.minHeight='';for(var z=0;z<k.length;z++)if(k[z].style)k[z].style.top='';return;}
   var base=cardsEl.getBoundingClientRect().top;
   var items=topCards.map(function(c){var a=c.getAttribute('data-anchor');var el=a?anchorEl(a):null;
