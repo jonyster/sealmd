@@ -973,7 +973,7 @@ export function renderReviewPage({
     <button class="btn primary tiny" id="scPost">Comment</button>
   </div>
 </div>
-<div class="editbar" id="editBar" hidden><span class="ebnote">Editing <code>doc.md</code> — changes save automatically. <span id="editStat" class="editstat">Saved</span></span><span class="spacer"></span><button class="btn ghost tiny" id="editRevert" title="Discard changes since you opened the editor">Revert</button><button class="btn primary tiny" id="editDone">Done</button></div>
+<div class="editbar" id="editBar" hidden><span class="ebnote">Editing <code>doc.md</code> — saves automatically${gitRemote ? '; <b>Done</b> pushes to the PR' : ''}. <span id="editStat" class="editstat">Saved</span></span><span class="spacer"></span><button class="btn ghost tiny" id="editRevert" title="Discard changes since you opened the editor">Revert</button><button class="btn primary tiny" id="editDone">Done</button></div>
 <div class="mentionmenu" id="mentionMenu" hidden></div>
 <div class="sharedlg" id="shareDlg" hidden>
   <div class="sharecard">
@@ -1529,7 +1529,9 @@ function scheduleSave(){editDirty=true;setStat('Saving…');clearTimeout(editTim
 function enterEdit(){setView('md');docMdEl.contentEditable='true';docMdEl.classList.add('editing');editBar.hidden=false;editSnap=docMdEl.innerText;setStat('Saved');docMdEl.focus();}
 async function exitEdit(){clearTimeout(editTimer);if(editDirty||editSaving)await editSave();
   docMdEl.contentEditable='false';docMdEl.classList.remove('editing');editBar.hidden=true;
-  if(SEAL.autoCommit)doCommit(true);}   // push once on the way out
+  // Push edits live to the PR: one commit per edit session lands on the branch,
+  // so an open PR updates. Any remote → push (not just when auto-push is on).
+  if(SEAL.gitRemote)doCommit(true);}
 if(editBtn)editBtn.onclick=enterEdit;
 if(docMdEl)docMdEl.addEventListener('input',()=>{if(docMdEl.isContentEditable)scheduleSave();});
 var editDoneB=document.getElementById('editDone');if(editDoneB)editDoneB.onclick=exitEdit;
