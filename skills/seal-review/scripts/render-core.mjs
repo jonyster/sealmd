@@ -442,6 +442,21 @@ export function renderReviewPage({
 </div>
 <div id="sumReady">${roleMap[defaultSlug]}</div>`;
 
+  // ---- Change Brief rail pane: a PRIORITIZED list (mirrors the prototype) — items
+  // ranked by what matters to the role, each with a severity tag + number badge.
+  // needs_attention = High (risks/judgment calls), key_decisions = Med. Re-renders
+  // on the summary_sig full-reload, so a regenerated brief shows here too.
+  const briefRole = roles[0] || {};
+  const briefSrc = [
+    ...(briefRole.needs_attention || []).map((x) => ({ t: typeof x === 'string' ? x : (x.text || x.value || ''), sev: 'high', label: 'Needs attention' })),
+    ...(briefRole.key_decisions || []).map((x) => ({ t: typeof x === 'string' ? x : (x.label ? (x.label + (x.value ? ' — ' + x.value : '')) : (x.value || '')), sev: 'med', label: 'Decision' })),
+  ].filter((i) => String(i.t).trim()).slice(0, 6);
+  let _bn = 0;
+  const briefItems = briefSrc.map((i) => `<div class="bchg ${i.sev}"><span class="bchg-n">${++_bn}</span><div class="bchg-bd"><div class="bchg-h">${renderInline(String(i.t))}</div><span class="bchg-sev ${i.sev}">${i.label}</span></div></div>`).join('');
+  const briefBody = briefItems
+    ? `${briefRole.lead ? `<p class="brief-lead">${renderInline(String(briefRole.lead))}</p>` : ''}<div class="bchglist">${briefItems}</div>`
+    : `Open <b>Summary</b> for the role-tailored digest, or <b>Full doc</b> to read every section.`;
+
   // ---- rail: comments + suggestions -----------------------------------------
   const suggestionsHtml = suggestions.length
     ? `<div class="sg-sec">${suggestions.map(card).join('\n')}</div>`
@@ -686,6 +701,18 @@ export function renderReviewPage({
   .brief .t{font-size:14px;font-weight:500;color:var(--ink);margin-bottom:4px}
   .brief .s{font-size:11px;color:var(--muted)}
   .brief .bbody{font-size:13px;color:var(--ink-soft);line-height:1.55}
+  .brief-lead{margin:0 0 12px;color:var(--ink)}
+  .bchglist{display:flex;flex-direction:column;gap:8px}
+  .bchg{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--paper)}
+  .bchg.high{border-left:3px solid var(--sev-high,#b3334c)}
+  .bchg.med{border-left:3px solid var(--amber,#d9a800)}
+  .bchg-n{flex-shrink:0;width:18px;height:18px;border-radius:50%;background:var(--ink-soft);color:var(--paper);font-size:10px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;margin-top:1px}
+  .bchg-bd{min-width:0;flex:1}
+  .bchg-h{font-size:12.5px;line-height:1.4;color:var(--ink)}
+  .bchg-sev{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .bchg-sev::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--muted)}
+  .bchg-sev.high::before{background:var(--sev-high,#b3334c)}
+  .bchg-sev.med::before{background:var(--amber,#d9a800)}
   .brieffoot{font-size:11px;color:var(--muted);padding:0 16px 12px;text-align:center}
   .ask{display:flex;flex-direction:column;background:var(--paper);border:1px solid var(--card-border);border-radius:var(--r-lg);min-height:300px;overflow:hidden;box-shadow:var(--shadow-card)}
   .ask .ah{padding:16px;border-bottom:1px solid var(--line)}
@@ -917,11 +944,10 @@ export function renderReviewPage({
       <div class="railpane on" id="paneBrief">
         <div class="brief" id="brief">
           <div class="bh"><div class="k">Change Brief</div>
-            <div class="t">What changed and why it matters</div>
-            <div class="s">Tailored to your role.</div></div>
-          <div class="bbody">Open <b>Summary</b> for the role-tailored digest, or <b>Full doc</b> to read every section.</div>
+            <div class="t">Written for ${escapeHtml(defaultLabel)}</div></div>
+          <div class="bbody">${briefBody}</div>
         </div>
-        <div class="brieffoot">Rendered 100% locally · zero network calls.</div>
+        <div class="brieffoot">Ranked by what matters to <b>${escapeHtml(defaultLabel)}</b>.</div>
       </div>
 
       <div class="railpane" id="paneComments">
