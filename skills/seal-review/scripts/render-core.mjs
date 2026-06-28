@@ -797,6 +797,7 @@ export function renderReviewPage({
   .editbar{position:fixed;left:0;right:0;bottom:0;z-index:110;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--panel-2);border-top:1px solid var(--line-strong);box-shadow:var(--shadow-pop)}
   .editbar[hidden]{display:none}
   .editbar .ebnote{font-size:12.5px;color:var(--muted)}
+  .editstat{margin-left:6px;font-weight:600;color:var(--ink-soft)}
   .docmd.editing{outline:2px solid var(--seal);outline-offset:2px;background:#0d1018;cursor:text;min-height:50vh}
   .sc-email{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;outline:none;color:var(--ink);background:var(--input-fill);margin-bottom:7px}
   .sc-email:focus{border-color:var(--seal);box-shadow:0 0 0 2px var(--seal-soft)}
@@ -983,7 +984,7 @@ export function renderReviewPage({
     <button class="btn primary tiny" id="scPost">Comment</button>
   </div>
 </div>
-<div class="editbar" id="editBar" hidden><span class="ebnote">Editing Markdown — <b>Save</b> writes <code>doc.md</code> (content hash changes; anchored comments re-resolve)</span><span class="spacer"></span><button class="btn ghost tiny" id="editCancel">Cancel</button><button class="btn primary tiny" id="editSave">Save to doc.md</button></div>
+<div class="editbar" id="editBar" hidden><span class="ebnote">Editing <code>doc.md</code> — changes save automatically. <span id="editStat" class="editstat">Saved</span></span><span class="spacer"></span><button class="btn ghost tiny" id="editRevert" title="Discard changes since you opened the editor">Revert</button><button class="btn primary tiny" id="editDone">Done</button></div>
 <div class="mentionmenu" id="mentionMenu" hidden></div>
 <div class="sharedlg" id="shareDlg" hidden>
   <div class="sharecard">
@@ -1515,16 +1516,35 @@ document.addEventListener('click',e=>{
   const ac=e.target.closest('[data-accept]');if(ac){e.preventDefault();e.stopPropagation();ownerPost('/api/accept',{id:ac.dataset.accept},'Suggestion applied to doc.md');return;}
   const ds=e.target.closest('[data-dismiss]');if(ds){e.preventDefault();e.stopPropagation();ownerPost('/api/dismiss',{id:ds.dataset.dismiss},'Comment dismissed');return;}
 },true);
-// edit the document (raw Markdown) — Save writes doc.md
+// edit the document (raw Markdown) — Google-Docs-style autosave to doc.md.
+// Saves ~1s after typing stops (defer_commit: no per-save push); one commit
+// fires on Done. Revert restores the text from when the editor opened.
 const editBtn=document.getElementById('editBtn'),editBar=document.getElementById('editBar'),docMdEl=document.getElementById('docMd');
-if(editBtn)editBtn.onclick=()=>{setView('md');docMdEl.contentEditable='true';docMdEl.classList.add('editing');editBar.hidden=false;docMdEl.focus();};
-var editCancelB=document.getElementById('editCancel');if(editCancelB)editCancelB.onclick=()=>(window.__sealReloading=true,location.reload());
-var editSaveB=document.getElementById('editSave');if(editSaveB)editSaveB.onclick=async()=>{
-  const md=docMdEl.innerText;if(!md.trim()){toast('Empty — not saving');return;}
-  await ownerPost('/api/doc',{markdown:md},'Saved to doc.md');
-  // No reload anymore — exit edit mode by hand so the bar/contenteditable clear.
+const editStat=document.getElementById('editStat');
+var editSnap='',editTimer=null,editSaving=false,editDirty=false;
+function setStat(s){if(editStat)editStat.textContent=s;}
+async function editSave(){
+  if(editSaving){editDirty=true;return;}
+  const md=docMdEl.innerText;if(!md.trim()){setStat('Empty — not saved');return;}
+  editSaving=true;editDirty=false;setStat('Saving…');
+  try{const j=await(await fetch('/api/doc',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({markdown:md,defer_commit:true})})).json();
+    setStat(j&&j.ok?'Saved':'Save failed');}
+  catch(e){setStat('Save failed — offline?');}
+  editSaving=false;
+  if(editDirty)editSave();   // coalesce edits that landed mid-save
+}
+function scheduleSave(){editDirty=true;setStat('Saving…');clearTimeout(editTimer);editTimer=setTimeout(editSave,1000);}
+function enterEdit(){setView('md');docMdEl.contentEditable='true';docMdEl.classList.add('editing');editBar.hidden=false;editSnap=docMdEl.innerText;setStat('Saved');docMdEl.focus();}
+async function exitEdit(){clearTimeout(editTimer);if(editDirty||editSaving)await editSave();
   docMdEl.contentEditable='false';docMdEl.classList.remove('editing');editBar.hidden=true;
-};
+  if(SEAL.autoCommit)doCommit(true);}   // push once on the way out
+if(editBtn)editBtn.onclick=enterEdit;
+if(docMdEl)docMdEl.addEventListener('input',()=>{if(docMdEl.isContentEditable)scheduleSave();});
+var editDoneB=document.getElementById('editDone');if(editDoneB)editDoneB.onclick=exitEdit;
+var editRevertB=document.getElementById('editRevert');if(editRevertB)editRevertB.onclick=async()=>{
+  clearTimeout(editTimer);docMdEl.innerText=editSnap;
+  await editSave();   // persist the reverted text
+  toast('Reverted to where you started');};
 
 // ---- filename chip: reveal doc.md in the OS file manager (GitHub variant is a plain <a>) ----
 const srcChipEl=document.getElementById('srcChip');

@@ -695,3 +695,32 @@ test('serve: with --notify-cmd, a comment runs the external command with SEAL_EV
     });
   } finally { ws.cleanup(); }
 });
+
+// ===========================================================================
+// /api/doc defer_commit — autosave-while-typing writes the file but skips the
+// per-save commit; a normal save still commits. (Google-Docs-style autosave.)
+// ===========================================================================
+test('/api/doc defer_commit writes doc.md but suppresses the auto-commit', async () => {
+  const ws = initWorkspace({ git: true });
+  try {
+    const { execSync } = await import('node:child_process');
+    const git = (c) => execSync('git ' + c, { cwd: ws.dir, encoding: 'utf8' }).trim();
+    git('add -A'); git('commit -q -m initial');
+    const count = () => parseInt(git('rev-list --count HEAD'), 10);
+
+    await withServe(ws, [], async ({ base }) => {
+      await jpost(base, '/api/autocommit', { on: true });   // auto-push ON
+      const before = count();
+
+      const a = await jpost(base, '/api/doc', { markdown: '# Edited\n\nAutosave body.', defer_commit: true });
+      assert.equal(a.json.ok, true, 'deferred save ok');
+      assert.match(ws.read('doc.md'), /Autosave body\./, 'file written on deferred save');
+      assert.equal(count(), before, 'deferred save made NO commit');
+
+      const b = await jpost(base, '/api/doc', { markdown: '# Edited\n\nFinal body.' });   // no defer → commits
+      assert.equal(b.json.ok, true, 'final save ok');
+      assert.match(ws.read('doc.md'), /Final body\./, 'file written on final save');
+      assert.equal(count(), before + 1, 'final save committed once');
+    });
+  } finally { ws.cleanup(); }
+});

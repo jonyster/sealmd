@@ -1323,7 +1323,10 @@ function cmdServe() {
         } else if (url.pathname === '/api/doc') {
           const { content_hash } = coreSaveDoc(doc, { markdown: body.markdown });
           result = { ok: true, content_hash };
-          emitEvent({ type: 'doc_edited', doc, content_hash, hint: 'owner edited the document' }); autoCommitFire();
+          // defer_commit: autosave-while-typing writes the file but skips the
+          // per-save commit/push (the editor fires one commit on exit instead).
+          emitEvent({ type: 'doc_edited', doc, content_hash, hint: 'owner edited the document' });
+          if (!body.defer_commit) autoCommitFire();
         } else if (url.pathname === '/api/summary') {
           // request a role-tailored summary; if not present, ask the AI console (event) to generate it
           const roles = readSummaryRoles(doc);
