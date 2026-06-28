@@ -1,5 +1,5 @@
 ---
-description: Set up a NEW local document review — guided: confirm doc → owner → your role → sharing (git + email) → open it.
+description: Set up a NEW local document review — guided: confirm doc → owner → your role → open it.
 ---
 
 **Plain language:** call `<doc>.seal.md` **"the review file"** to the user — never say "sidecar" (jargon).
@@ -30,15 +30,12 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
    git user. Confirm "Owner = *<detected>*?"; for an externally-published doc make
    sure it's that author, not you. If none, ask. (`--owner "Name"` to override.)
 3. **Your role** — ask "What's your role for this review?"; you'll generate that role's tailored summary.
-4. **Sharing** — **multi-select** (`AskUserQuestion`, `multiSelect: true`):
-   **Git** (default, pre-checked) and **Email** — always show both. If Email is
-   picked and `SEAL_RESEND_KEY` isn't set, walk them through it: get a free key at
-   resend.com, `export SEAL_RESEND_KEY=…`, then ask for the recipient address. If
-   they'd rather skip, drop Email → Git only. `--notify` takes the chosen set
-   (e.g. `git,email`).
+4. **Sharing** — **Git only.** Sharing happens by committing the doc + review
+   file and pushing (`seal commit DOC --push`); collaborators pull. No other
+   channel.
 5. **Set up + open:**
    ```bash
-   seal init    --in DOC --owner "<owner>" [--notify git,email]
+   seal init    --in DOC --owner "<owner>"
    seal summary --in DOC --role "<their role>" --file <tmp.json>
    seal start   DOC                                # opens the LIVE review (background task)
    ```
