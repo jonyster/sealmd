@@ -448,6 +448,7 @@ export function renderReviewPage({
   const cmtCount = plainComments.length;
   const sugCount = suggestions.length;
   const totalCount = comms.length;
+  const hasDisposed = comms.some((c) => c.status === 'resolved');
 
   const railEmpty = totalCount === 0
     ? `<div class="rail-empty" id="railEmpty">No comments or suggestions yet. Add one above, or select text in the <b>Full doc</b> to pin a comment.</div>`
@@ -716,6 +717,11 @@ export function renderReviewPage({
   .card{background:var(--paper);border:1px solid var(--card-border);border-radius:var(--r-lg);box-shadow:var(--shadow-card);padding:12px;cursor:pointer;transition:box-shadow var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease);position:relative}
   .card.focus,.card.cur{border-color:var(--violet);box-shadow:0 0 0 2px var(--violet-soft),var(--shadow-card)}
   .card.disposed{opacity:.6}
+  .cfilter{display:inline-flex;gap:2px;background:var(--fill);border:1px solid var(--line);border-radius:var(--r-md);padding:2px;margin-bottom:10px}
+  .cfilter button{border:0;background:none;color:var(--muted);font:inherit;font-size:12px;font-weight:600;padding:5px 11px;border-radius:calc(var(--r-md) - 2px);cursor:pointer}
+  .cfilter button.on{background:var(--paper);color:var(--ink);box-shadow:var(--shadow-card)}
+  body.cf-open #paneComments .card.disposed{display:none!important}
+  body.cf-dismissed #paneComments .card:not(.disposed){display:none!important}
   .card .chead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
   .card .av{width:26px;height:26px;border-radius:50%;background:var(--ink-soft);color:var(--paper);font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0}
   .card .av.agent{background:var(--violet)}.card .av.pm{background:var(--ok)}
@@ -854,7 +860,7 @@ export function renderReviewPage({
     .canvas-area{padding:16px 8px 150px;gap:16px}
   }
 </style></head>
-<body class="mode-view view-summary">
+<body class="mode-view view-summary${hasDisposed ? ' cf-open' : ''}">
 <div class="chrome" id="chrome">
   <header class="top">
     <div class="row">
@@ -877,7 +883,7 @@ export function renderReviewPage({
       <span style="margin-left:2px">${escapeHtml(defaultLabel)} view</span>
     </div>
   </header>
-  ${(mode === 'serve' && gitRemote && canCommit) ? `<div class="sharenudge" id="shareNudge"${(unshared && !autoCommit) ? '' : ' hidden'}>
+  ${(mode === 'serve' && gitRemote && canCommit) ? `<div class="sharenudge" id="shareNudge"${(unshared && totalCount > 0 && !autoCommit) ? '' : ' hidden'}>
     <span class="sn-txt"><b>Your comments aren't shared yet</b> — saved on this machine but not pushed. Reviewers won't see them until you do.</span>
     <button class="btn primary tiny" id="nudgeCommit">↗ Commit &amp; push</button>
     <button class="sn-x" id="nudgeDismiss" type="button" aria-label="Dismiss">&times;</button>
@@ -928,6 +934,7 @@ export function renderReviewPage({
           </div>
           <pre class="cmt-out" id="cmtOut"></pre>
         </div>
+        ${hasDisposed ? `<div class="cfilter" id="cFilter"><button data-cf="open" class="on">Open</button><button data-cf="dismissed">Dismissed</button><button data-cf="all">All</button></div>` : ''}
         <div id="suggBox">${suggestionsHtml}</div>
         <div class="cards" id="cards">${cardsHtml}</div>
         <div id="railExtra">${unanchoredNote}${railEmpty}</div>
@@ -1001,6 +1008,15 @@ function setPane(name){
   if(name==='comments')scheduleAlign();
 }
 document.getElementById('railSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setPane(b.dataset.pane);});
+// comment filter: Open (hide dismissed) / Dismissed / All
+const cFilter=document.getElementById('cFilter');
+function setCFilter(f){body.classList.remove('cf-open','cf-dismissed','cf-all');body.classList.add('cf-'+f);
+  if(cFilter)cFilter.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.cf===f));
+  try{sessionStorage.setItem('seal-cfilter',f)}catch(e){}
+  scheduleAlign();}
+if(cFilter){cFilter.addEventListener('click',e=>{const b=e.target.closest('button');if(b)setCFilter(b.dataset.cf);});
+  var _cf=null;try{_cf=sessionStorage.getItem('seal-cfilter')}catch(e){}
+  setCFilter(_cf==='dismissed'||_cf==='all'?_cf:'open');}
 
 // ---- role switcher (inline .rolepick dropdown) ----
 function slugifyRole(s){return String(s==null?'':s).toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,64);}

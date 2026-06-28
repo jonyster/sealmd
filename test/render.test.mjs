@@ -363,14 +363,16 @@ test('renderReviewPage returns a self-contained HTML document', () => {
 });
 
 test('share nudge shows only when serve + remote + UNSHARED comments + not auto-committing', () => {
-  const o = { mode: 'serve', gitRemote: 'git@x', canCommit: true };
+  const cmt = [{ id: 'a', author: 'x', body: 'hi', status: 'open' }];   // totalCount > 0
+  const o = { mode: 'serve', gitRemote: 'git@x', canCommit: true, comments: cmt };
   const visible = (h) => /id="shareNudge"(?![^>]*\bhidden\b)/.test(h);
   const present = (h) => /id="shareNudge"/.test(h);
   assert.ok(visible(renderReviewPage(minimalOpts({ ...o, unshared: true, autoCommit: false }))), 'unshared comments → visible');
   assert.ok(!visible(renderReviewPage(minimalOpts({ ...o, unshared: false, dirty: true }))), 'dirty but no unshared comments → hidden');
+  assert.ok(!visible(renderReviewPage(minimalOpts({ ...o, unshared: true, comments: [] }))), 'no comments at all → hidden');
   assert.ok(!visible(renderReviewPage(minimalOpts({ ...o, unshared: true, autoCommit: true }))), 'auto-commit → hidden');
   assert.ok(!present(renderReviewPage(minimalOpts({ ...o, mode: 'static', unshared: true }))), 'static → absent');
-  assert.ok(!present(renderReviewPage(minimalOpts({ mode: 'serve', gitRemote: null, canCommit: true, unshared: true }))), 'no remote → absent');
+  assert.ok(!present(renderReviewPage(minimalOpts({ mode: 'serve', gitRemote: null, canCommit: true, unshared: true, comments: cmt }))), 'no remote → absent');
 });
 
 test('title HTML entities are decoded, not shown literally', () => {
