@@ -368,7 +368,7 @@ const FAVICON_HREF = 'data:image/svg+xml;base64,' + Buffer.from(FAVICON_SVG).toS
 export function renderReviewPage({
   title, owner = null, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
   curatedRoles = [], reviewerRole = '', people = [],
-  canCommit = false, gitRemote = null, autoCommit = false, dirty = false, canPR = false,
+  canCommit = false, gitRemote = null, autoCommit = false, dirty = false, unshared = false, canPR = false,
   mdRaw, contentHash, wordCount, comments = [], renderedAt = '', mode = 'static', token = '', generic = false,
 }) {
   title = decodeEntities(title);   // "# &nbsp;X" → space, not a literal "&nbsp;"
@@ -462,7 +462,7 @@ export function renderReviewPage({
     docPath, enginePath, srcName, mode, wordCount,
     people: Array.isArray(people) ? people : [],
     taxonomy: taxonomy.map((t) => ({ slug: t.slug, label: t.label })),
-    canCommit, gitRemote, autoCommit, dirty, canPR, token,
+    canCommit, gitRemote, autoCommit, dirty, unshared, canPR, token,
   }).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html><html lang="en" data-theme="dark"><head>
@@ -877,7 +877,7 @@ export function renderReviewPage({
       <span style="margin-left:2px">${escapeHtml(defaultLabel)} view</span>
     </div>
   </header>
-  ${(mode === 'serve' && gitRemote && canCommit) ? `<div class="sharenudge" id="shareNudge"${(dirty && !autoCommit) ? '' : ' hidden'}>
+  ${(mode === 'serve' && gitRemote && canCommit) ? `<div class="sharenudge" id="shareNudge"${(unshared && !autoCommit) ? '' : ' hidden'}>
     <span class="sn-txt"><b>Your comments aren't shared yet</b> — saved on this machine but not pushed. Reviewers won't see them until you do.</span>
     <button class="btn primary tiny" id="nudgeCommit">↗ Commit &amp; push</button>
     <button class="sn-x" id="nudgeDismiss" type="button" aria-label="Dismiss">&times;</button>

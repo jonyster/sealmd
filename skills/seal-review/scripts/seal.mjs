@@ -422,7 +422,7 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   return renderReviewPage({
     title: r.document.title, owner: r.document.owner || null, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
-    people, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
+    people, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git), unshared: unsharedComments(doc, git),
     canPR: git.inRepo && !!git.remote && ghReady(),
     mdRaw: md, contentHash: ch, wordCount, comments, mode, token, generic: genericSummary,
     renderedAt: 'rendered ' + nowISO(),
@@ -437,6 +437,21 @@ function gitDirty(doc, git) {
     const st = execFileSync('git', ['status', '--porcelain', '--', ...rel], { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     return st.trim().length > 0;
   } catch { return false; }
+}
+// Are there unshared COMMENTS/SUGGESTIONS specifically? The share nudge keys on
+// this (not gitDirty, which also lights up for doc/summary edits). True when the
+// sidecar (the file holding comments) is either uncommitted OR committed but not
+// yet pushed — i.e. reviewers can't see the comments yet. Local-only (no fetch).
+function unsharedComments(doc, git) {
+  if (!git || !git.inRepo) return false;
+  try {
+    const G = (args) => execFileSync('git', args, { cwd: git.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    let rel; try { rel = relative(git.root, realpathSync(sidecarPath(doc))); } catch { rel = sidecarPath(doc); }
+    if (G(['status', '--porcelain', '--', rel]).length > 0) return true;       // uncommitted comments
+    const ahead = parseInt(G(['rev-list', '--count', '@{u}..HEAD']) || '0', 10) || 0;  // committed-but-unpushed
+    if (ahead > 0 && G(['diff', '--name-only', '@{u}', 'HEAD', '--', rel]).length > 0) return true;
+    return false;
+  } catch { return false; }   // no upstream / detached / errors → treat as shared (don't nag)
 }
 function regen(doc, r) {
   if (flag('no-render')) return null;
@@ -900,25 +915,24 @@ function corePostReviewComments(doc, git, { prUrl, head, base }) {
     }
   }
 
-  // One summary comment for everything not inlined. Delete the prior seal summary first.
+  // Off-diff comments: one issue comment EACH, carrying a seal:c=<id> marker — so a
+  // reviewer can reply to a specific comment and a `seal pull` threads that reply
+  // under the right parent (a single bulk summary couldn't be replied-to per item).
   let summary = 0;
   if (leftover.length) {
-    for (const ic of ghJSON(`repos/${repo}/issues/${n}/comments`)) {
-      if ((ic.body || '').includes('seal:pr-comments')) { try { ghApi(['--method', 'DELETE', `repos/${repo}/issues/comments/${ic.id}`]); } catch { /* ignore */ } }
+    const existing = ghJSON(`repos/${repo}/issues/${n}/comments`);
+    // retire the old single bulk summary if a prior version posted one
+    for (const ic of existing) {
+      if (/^<!--\s*seal:pr-comments/m.test(ic.body || '')) { try { ghApi(['--method', 'DELETE', `repos/${repo}/issues/comments/${ic.id}`]); } catch { /* ignore */ } }
     }
-    const L = ['<!-- seal:pr-comments -->', `## 🦭 Seal review — ${leftover.length} comment${leftover.length === 1 ? '' : 's'}`, ''];
-    if (diffLines.size === 0) L.push(`_The reviewed doc is unchanged in this PR, so these are posted as a summary rather than inline threads._`, '');
+    const issuePosted = new Set(existing.map((ic) => (String(ic.body || '').match(/^<!--\s*seal:c=([^\s>]+)/m) || [])[1]).filter(Boolean));
     for (const { c, line } of leftover) {
-      const loc = line ? `line ${line}` : 'document';
-      const kind = c.suggestion != null ? 'Suggestion' : 'Comment';
-      const by = c.author ? ` by **${c.author}**` : '';
-      L.push(`- **${kind}**${by} · _${loc}_ · on “${(c.anchor || {}).quote || ''}”`);
-      if (c.body) L.push(`  - ${c.body}`);
-      if (c.suggestion != null) L.push(`  - _suggested replacement:_ \`${String(c.suggestion).replace(/`/g, '​`')}\``);
-      for (const t of (c.thread || [])) L.push(`    - ↳ **${t.author || '?'}**: ${t.body || ''}`);
+      if (issuePosted.has(c.id)) { skipped++; continue; }
+      const loc = line ? `line ${line}` : 'the document';
+      const q = (c.anchor || {}).quote ? ` · on “${c.anchor.quote.slice(0, 80)}${c.anchor.quote.length > 80 ? '…' : ''}”` : '';
+      const head = `<!-- seal:c=${c.id} -->\n🦭 **Seal review** · _${loc}_${q}`;
+      try { ghApi(['--method', 'POST', `repos/${repo}/issues/${n}/comments`, '--input', '-'], JSON.stringify({ body: `${head}\n\n${fmt(c)}` })); summary++; } catch { /* ignore */ }
     }
-    L.push('', '_Posted by Seal._');
-    try { ghApi(['--method', 'POST', `repos/${repo}/issues/${n}/comments`, '--input', '-'], JSON.stringify({ body: L.join('\n') })); summary = leftover.length; } catch { /* ignore */ }
   }
   return { inline, summary, skipped };
 }
@@ -978,6 +992,14 @@ function cmdPR() {
 // line, names the GitHub author + section in the body, and mentions the doc OWNER — the local
 // notify target. (The plugin has no role→person map, so the hosted "tag the section's role
 // reviewer" degrades to the owner here; section-reviewer routing is a sealmd.net feature.)
+// Drop the quoted block a GitHub "quote reply" prepends (lines starting with `>`),
+// leaving just the reply text. Collapses the blank-line gap the quote leaves behind.
+export function stripGithubQuote(s) {
+  return String(s || '').split('\n').filter((l) => !/^\s*>/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+// The seal:c=<id> a quote-reply carries names the local comment it replies to.
+export function sealCommentRef(s) { const m = String(s || '').match(/seal:c=([^\s>)]+)/); return m ? m[1] : null; }
+
 function corePull(doc, { prUrl } = {}) {
   const git = gitInfo(dirname(doc));
   if (!git.inRepo) throw new Error('not a git repo — run `git init` first');
@@ -1014,7 +1036,12 @@ function corePull(doc, { prUrl } = {}) {
     if (c.external_ref) { have.add(c.external_ref); extToId.set(c.external_ref, c.id); }
     for (const t of (c.thread || [])) if (t.external_ref) have.add(t.external_ref);
   }
-  const isOurs = (b) => /seal:c=|seal:pr-comments/.test(b || '');
+  // OUR posts carry the marker at the START of a line. A reviewer's "quote reply"
+  // pastes our comment too, but quoted (lines prefixed with `> `) — so match the
+  // marker only when it's NOT inside a quote, else we'd skip the human's reply.
+  const isOurs = (b) => /^<!--\s*seal:(c=|pr-comments)/m.test(b || '');
+  const stripQuote = stripGithubQuote;
+  const sealParentOf = sealCommentRef;
   // Nearest heading at or above a 1-based line — used to name the section in the imported body.
   const sectionFor = (ln) => {
     for (let i = Math.min(ln, docLines.length) - 1; i >= 0; i--) {
@@ -1025,12 +1052,16 @@ function corePull(doc, { prUrl } = {}) {
   };
 
   let imported = 0, skipped = 0;
-  const add = (ghId, login, text, ln, inReplyTo) => {
+  const add = (ghId, login, rawText, ln, inReplyTo) => {
     const ext = `gh:${ghId}`;
     if (have.has(ext)) { skipped++; return; }
-    if (!String(text || '').trim()) { skipped++; return; }
-    // A GitHub reply threads under the parent we already mirrored — no re-anchor, no re-route.
-    const parentId = inReplyTo ? extToId.get(`gh:${inReplyTo}`) : null;
+    const text = stripQuote(rawText);   // just the reply, not the quoted comment
+    if (!text) { skipped++; return; }   // pure quote, nothing new
+    // Thread under a parent: a GitHub review reply (in_reply_to) we already mirrored,
+    // OR a quote-reply whose quoted text carries our seal:c=<localId> marker.
+    const markerId = sealParentOf(rawText);
+    const parentId = (inReplyTo ? extToId.get(`gh:${inReplyTo}`) : null)
+      || (markerId && r.comments.some((c) => c.id === markerId) ? markerId : null);
     if (parentId) {
       coreReply(doc, { id: parentId, author: login, body: `**@${login}** replied on the GitHub PR:\n\n${text}`, externalRef: ext });
       have.add(ext); imported++;
