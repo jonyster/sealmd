@@ -116,6 +116,38 @@ function liveHash(doc) { return contentHash(readDoc(doc)); }
 
 // ---- role-tailored summaries (persisted in <doc>.seal.summary.json) --------
 function summaryFilePath(doc) { return doc.replace(/\.md$/i, '') + '.seal.summary.json'; }
+function baselinePath(doc) { return doc.replace(/\.md$/i, '') + '.seal.baseline.md'; }
+
+// Split markdown into sections at ATX headings: [{ heading, body }].
+function splitSections(md) {
+  const out = []; let cur = { heading: '(intro)', body: [] };
+  for (const l of String(md).split('\n')) {
+    const m = l.match(/^#{1,6}\s+(.+?)\s*#*$/);
+    if (m) { out.push(cur); cur = { heading: m[1].trim(), body: [] }; } else cur.body.push(l);
+  }
+  out.push(cur);
+  return out.map((s) => ({ heading: s.heading, body: s.body.join('\n').trim() }));
+}
+// What changed in the doc since the last brief was generated (the baseline snapshot)
+// — section-level: added / removed / modified, ranked high-first. The Change Brief
+// shows ONLY these, so it reflects edits, not the whole digest.
+function docChanges(doc) {
+  const cur = readDoc(doc);
+  let base;
+  try { base = readFileSync(baselinePath(doc), 'utf8'); }
+  catch { try { writeFileSync(baselinePath(doc), cur); } catch {} return { hasBaseline: true, items: [] }; }   // lazy bootstrap = up to date
+  if (base === cur) return { hasBaseline: true, items: [] };
+  const A = splitSections(base), B = splitSections(cur);
+  const ah = new Map(A.map((s) => [s.heading, s.body])), bh = new Map(B.map((s) => [s.heading, s.body]));
+  const items = [];
+  for (const s of B) {
+    if (!ah.has(s.heading)) items.push({ heading: s.heading, kind: 'added', sev: 'high' });
+    else if (ah.get(s.heading) !== s.body) items.push({ heading: s.heading, kind: 'modified', sev: 'med' });
+  }
+  for (const s of A) if (!bh.has(s.heading)) items.push({ heading: s.heading, kind: 'removed', sev: 'high' });
+  items.sort((x, y) => (x.sev === 'high' ? 0 : 1) - (y.sev === 'high' ? 0 : 1));
+  return { hasBaseline: true, items };
+}
 function readSummaryRoles(doc) {
   const sp = arg('summary') && existsSync(arg('summary')) ? arg('summary') : summaryFilePath(doc);
   if (!existsSync(sp)) return [];
@@ -422,7 +454,7 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   return renderReviewPage({
     title: r.document.title, owner: r.document.owner || null, srcName: r.document.source, srcUrl, docPath: doc, enginePath: ENGINE,
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
-    people, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git), unshared: unsharedComments(doc, git),
+    people, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git), unshared: unsharedComments(doc, git), changes: docChanges(doc),
     canPR: git.inRepo && !!git.remote && ghReady(),
     mdRaw: md, contentHash: ch, wordCount, comments, mode, token, generic: genericSummary,
     renderedAt: 'rendered ' + nowISO(),
@@ -538,8 +570,9 @@ function ensureGitignore(doc) {
   let root = dir;
   try { root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: dir, encoding: 'utf8' }).trim(); } catch {}
   const gi = root + '/.gitignore';
-  // *.review.html = derived view; *.seal.notify.json = holds webhook URLs/secrets.
-  const lines = ['*.review.html', '*.seal.notify.json', '*.seal.requests.jsonl'];
+  // *.review.html = derived view; *.seal.notify.json = holds webhook URLs/secrets;
+  // *.seal.baseline.md = local "doc as of the last brief" snapshot for the Change Brief.
+  const lines = ['*.review.html', '*.seal.notify.json', '*.seal.requests.jsonl', '*.seal.baseline.md'];
   let body = ''; try { body = readFileSync(gi, 'utf8'); } catch {}
   const have = new Set(body.split('\n').map((l) => l.trim()));
   const add = lines.filter((l) => !have.has(l));
@@ -596,6 +629,7 @@ function initSidecar(doc, { force = false } = {}) {
     comments: [], approvals: [],
   };
   writeSidecar(sp, r);
+  try { writeFileSync(baselinePath(doc), readDoc(doc)); } catch {}   // Change Brief baseline = doc at review start
   const gi = ensureGitignore(doc);
   const notifyFile = channels.length ? writeNotifyPrefs(doc, channels) : null;
   return { sp, r, created: true, owner, ownerSource: ownerSrc, channels, notifyFile, contentHash: h, gitignore: gi, git };
@@ -789,7 +823,7 @@ function cmdBackfill() {
 // Stage the review's committable files (doc + review file + role summaries) and
 // commit — the shareable artifacts. Never touches the gitignored derived/secret
 // files. Core (throws); used by the CLI and the serve /api/commit endpoint.
-function coreCommit(doc, { message, push } = {}) {
+function coreCommit(doc, { message, push, resetBaseline } = {}) {
   const git = gitInfo(dirname(doc));
   if (!git.inRepo) throw new Error('not a git repo — this review is local-only / not shareable. Run `git init` first.');
   const sp = sidecarPath(doc);
@@ -804,12 +838,15 @@ function coreCommit(doc, { message, push } = {}) {
   try { G(['commit', '-m', msg]); committed = true; } catch { /* nothing to commit */ }
   let pushed = false, pushError = null;
   if (committed && push) { try { G(['push']); pushed = true; } catch (e) { pushError = String(e.message || e).split('\n')[0]; } }
+  // explicit share = the reviewer has caught up with the current doc → reset the
+  // Change Brief baseline. (Per-comment auto-commit passes resetBaseline=false.)
+  if (committed && resetBaseline) { try { writeFileSync(baselinePath(doc), readDoc(doc)); } catch {} }
   return { committed, pushed, pushError, files: rel, message: committed ? msg : null, remote: git.remote };
 }
 function cmdCommit() {
   const doc = docPath();
   const dashM = (() => { const i = process.argv.indexOf('-m'); return i !== -1 ? process.argv[i + 1] : null; })();
-  const r = coreCommit(doc, { message: arg('message') || arg('m') || dashM, push: flag('push') });
+  const r = coreCommit(doc, { message: arg('message') || arg('m') || dashM, push: flag('push'), resetBaseline: true });
   out({ ok: true, action: 'commit', ...r, push_error: r.pushError, note: r.committed ? null : 'nothing to commit (no changes since last commit)' });
 }
 
@@ -1271,7 +1308,7 @@ function cmdServe() {
       // commit + push the review from the page
       if (req.method === 'POST' && url.pathname === '/api/commit') {
         const b = await readBody(req);
-        const r = coreCommit(doc, { message: b.message, push: b.push !== false });
+        const r = coreCommit(doc, { message: b.message, push: b.push !== false, resetBaseline: true });
         emitEvent({ type: 'committed', committed: r.committed, pushed: r.pushed, doc });
         return J(res, 200, { ok: true, ...r, push_error: r.pushError });
       }

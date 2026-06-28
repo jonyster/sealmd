@@ -368,7 +368,7 @@ const FAVICON_HREF = 'data:image/svg+xml;base64,' + Buffer.from(FAVICON_SVG).toS
 export function renderReviewPage({
   title, owner = null, srcName, srcUrl, docPath = '', enginePath = 'seal', roles = [],
   curatedRoles = [], reviewerRole = '', people = [],
-  canCommit = false, gitRemote = null, autoCommit = false, dirty = false, unshared = false, canPR = false,
+  canCommit = false, gitRemote = null, autoCommit = false, dirty = false, unshared = false, canPR = false, changes = null,
   mdRaw, contentHash, wordCount, comments = [], renderedAt = '', mode = 'static', token = '', generic = false,
 }) {
   title = decodeEntities(title);   // "# &nbsp;X" → space, not a literal "&nbsp;"
@@ -442,20 +442,19 @@ export function renderReviewPage({
 </div>
 <div id="sumReady">${roleMap[defaultSlug]}</div>`;
 
-  // ---- Change Brief rail pane: a PRIORITIZED list (mirrors the prototype) — items
-  // ranked by what matters to the role, each with a severity tag + number badge.
-  // needs_attention = High (risks/judgment calls), key_decisions = Med. Re-renders
-  // on the summary_sig full-reload, so a regenerated brief shows here too.
-  const briefRole = roles[0] || {};
-  const briefSrc = [
-    ...(briefRole.needs_attention || []).map((x) => ({ t: typeof x === 'string' ? x : (x.text || x.value || ''), sev: 'high', label: 'Needs attention' })),
-    ...(briefRole.key_decisions || []).map((x) => ({ t: typeof x === 'string' ? x : (x.label ? (x.label + (x.value ? ' — ' + x.value : '')) : (x.value || '')), sev: 'med', label: 'Decision' })),
-  ].filter((i) => String(i.t).trim()).slice(0, 6);
+  // ---- Change Brief rail pane: what CHANGED in the doc since the brief was written
+  // (the baseline snapshot), ranked high-first — added/removed sections = High,
+  // modified = Med. Each a number badge + severity tag (mirrors the prototype). Not
+  // the role digest. Empty/no-baseline → "up to date". Re-renders on summary_sig.
+  const chg = changes && Array.isArray(changes.items) ? changes.items.slice(0, 8) : [];
+  const kindLabel = { added: 'Added', removed: 'Removed', modified: 'Edited' };
   let _bn = 0;
-  const briefItems = briefSrc.map((i) => `<div class="bchg ${i.sev}"><span class="bchg-n">${++_bn}</span><div class="bchg-bd"><div class="bchg-h">${renderInline(String(i.t))}</div><span class="bchg-sev ${i.sev}">${i.label}</span></div></div>`).join('');
+  const briefItems = chg.map((i) => `<div class="bchg ${i.sev}"><span class="bchg-n">${++_bn}</span><div class="bchg-bd"><div class="bchg-h">${escapeHtml(String(i.heading || ''))}</div><span class="bchg-sev ${i.sev}">${kindLabel[i.kind] || 'Changed'}</span></div></div>`).join('');
   const briefBody = briefItems
-    ? `${briefRole.lead ? `<p class="brief-lead">${renderInline(String(briefRole.lead))}</p>` : ''}<div class="bchglist">${briefItems}</div>`
-    : `Open <b>Summary</b> for the role-tailored digest, or <b>Full doc</b> to read every section.`;
+    ? `<div class="bchglist">${briefItems}</div>`
+    : (changes && changes.hasBaseline
+        ? `<div class="brief-uptodate">No changes since this brief was written — you're up to date.</div>`
+        : `Change tracking starts once a role brief is generated. Open <b>Summary</b> for the digest, or <b>Full doc</b> to read every section.`);
 
   // ---- rail: comments + suggestions -----------------------------------------
   const suggestionsHtml = suggestions.length
@@ -713,6 +712,7 @@ export function renderReviewPage({
   .bchg-sev::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--muted)}
   .bchg-sev.high::before{background:var(--sev-high,#b3334c)}
   .bchg-sev.med::before{background:var(--amber,#d9a800)}
+  .brief-uptodate{font-size:12.5px;color:var(--muted);line-height:1.5}
   .brieffoot{font-size:11px;color:var(--muted);padding:0 16px 12px;text-align:center}
   .ask{display:flex;flex-direction:column;background:var(--paper);border:1px solid var(--card-border);border-radius:var(--r-lg);min-height:300px;overflow:hidden;box-shadow:var(--shadow-card)}
   .ask .ah{padding:16px;border-bottom:1px solid var(--line)}
@@ -944,10 +944,10 @@ export function renderReviewPage({
       <div class="railpane on" id="paneBrief">
         <div class="brief" id="brief">
           <div class="bh"><div class="k">Change Brief</div>
-            <div class="t">Written for ${escapeHtml(defaultLabel)}</div></div>
+            <div class="t">${chg.length ? `${chg.length} change${chg.length === 1 ? '' : 's'} since this brief` : 'What changed since this brief'}</div></div>
           <div class="bbody">${briefBody}</div>
         </div>
-        <div class="brieffoot">Ranked by what matters to <b>${escapeHtml(defaultLabel)}</b>.</div>
+        <div class="brieffoot">Edits since the <b>${escapeHtml(defaultLabel)}</b> brief was written · ranked by impact.</div>
       </div>
 
       <div class="railpane" id="paneComments">
