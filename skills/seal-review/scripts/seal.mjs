@@ -1237,6 +1237,10 @@ function cmdServe() {
   // per-session token (minted here, injected into the page) on every mutation. The
   // token is unguessable and same-origin-policy keeps a hostile page from reading it.
   const SESSION_TOKEN = randomBytes(18).toString('base64url');
+  // Presence: the page polls /api/state every ~10s, so a recent poll means a browser
+  // is open. Used to gate doc auto-pull + the brief-refresh loop to "only when viewed".
+  let lastClientPollMs = 0;
+  const pageOpen = () => lastClientPollMs > 0 && (Date.now() - lastClientPollMs) < 20000;
   const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
   const hostOk = (req) => LOOPBACK.has((req.headers.host || '').replace(/:\d+$/, ''));
   const originOk = (req) => { const o = req.headers.origin; if (!o) return true; try { return LOOPBACK.has(new URL(o).hostname); } catch { return false; } };
@@ -1252,7 +1256,12 @@ function cmdServe() {
         const html = buildPage(doc, r, { mode: 'serve', token: SESSION_TOKEN });
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(html); return;
       }
+      // presence probe (does NOT count as a view — only the page's /api/state does)
+      if (req.method === 'GET' && url.pathname === '/api/presence') {
+        return J(res, 200, { ok: true, open: pageOpen(), since_ms: lastClientPollMs ? Date.now() - lastClientPollMs : null });
+      }
       if (req.method === 'GET' && url.pathname === '/api/state') {
+        lastClientPollMs = Date.now();   // the page is polling → it's open
         const { r } = loadSidecar(doc);
         // summary_sig changes when a role brief is (re)generated, so the page reloads
         // to show it even though the DOC hash is unchanged.
@@ -1437,7 +1446,9 @@ function cmdServe() {
     if (pullSecs > 0 && ghReady()) {
       let pulling = false;
       const pullTick = () => {
-        if (pulling) return; pulling = true;
+        if (pulling) return;
+        if (!pageOpen()) return;   // only sync while someone's viewing the review
+        pulling = true;
         // 1) fast-forward the DOC from GitHub (edits made on github.com land locally)
         try {
           if (ffMergeFromUpstream(doc)) {
