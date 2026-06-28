@@ -25,9 +25,11 @@ ignore any tool that mentions `seal publish` / `SEAL_API_TOKEN`.
    git user. Confirm "Owner = *<detected>*?"; for an externally-published doc make
    sure it's that author, not you. If none, ask. (`--owner "Name"` to override.)
 3. **Your role** — ask "What's your role for this review?"; you'll generate that role's tailored summary.
-4. **Sharing** — **Git only.** Sharing happens by committing the doc + review
-   file and pushing (`seal commit DOC --push`); collaborators pull. No other
-   channel.
+4. **Sharing** — **don't ask; auto-detect.** Sharing is always git, so there's
+   no choice to make. If the repo has a remote, the review shares by commit + push
+   (step 5 does it). If there's no remote (or it isn't a git repo), tell the user
+   it's **local-only / on disk** and offer `git init` + `git remote add`. Never
+   show a sharing menu.
 5. **Set up + open:**
    ```bash
    seal init    --in DOC --owner "<owner>"

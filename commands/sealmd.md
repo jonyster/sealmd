@@ -71,10 +71,11 @@ and offer `/seal new DOC`.)
 3. **Your role** — **ask: "What's your role for this review?"** (Compliance, Eng,
    PM, Legal, a job title — anything). You'll generate that role's summary so
    their view is tailored from the first open.
-4. **Sharing — Git only.** Shares only if the repo has a remote. If it doesn't
-   (or isn't a repo), tell the user it's **local-only / saved on disk** and ask
-   for a **repo URL** to push to (`git remote add origin <url>`, or open from a
-   cloned repo). No remote = no point committing for sharing.
+4. **Sharing — don't ask; auto-detect.** Sharing is always git, so there's no
+   choice to present. Repo has a remote → step 5 shares it by commit + push. No
+   remote (or not a repo) → tell the user it's **local-only / saved on disk** and
+   offer to add one (`git remote add origin <url>`, or open from a cloned repo).
+   Never show a sharing menu.
 5. **Set up + start:**
    ```bash
    seal init   --in DOC --owner "<owner>"
