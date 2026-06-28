@@ -716,7 +716,7 @@ export function renderReviewPage({
   .bchg.hassrc:hover{border-color:var(--seal);box-shadow:0 0 0 1px var(--seal)}
   .bchg-jump{margin-left:5px;color:var(--seal);font-size:11px}
   .bchg-delta{font-size:11.5px;line-height:1.45;margin-top:5px}
-  .bchg-old{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--del,#b3334c)}
+  .bchg-old{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px;text-decoration-color:color-mix(in srgb,var(--del,#b3334c) 55%,transparent)}
   .bchg-new{color:var(--ink-soft);box-shadow:inset 0 -2px 0 var(--ins,#cfe8cf)}
   .bchg-n{flex-shrink:0;width:18px;height:18px;border-radius:50%;background:var(--ink-soft);color:var(--paper);font-size:10px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;margin-top:1px}
   .bchg-bd{min-width:0;flex:1}
