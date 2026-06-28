@@ -1087,8 +1087,12 @@ function corePull(doc, { prUrl } = {}) {
 
   // Inline review comments (anchored to a line of OUR doc); then general PR comments (doc-level).
   // Roots before replies so a reply's parent is already in extToId.
-  const review = ghJSON(`repos/${repo}/pulls/${n}/comments`).filter((c) => !isOurs(c.body) && (!c.path || c.path.split('\\').join('/') === rel));
-  const issue = ghJSON(`repos/${repo}/issues/${n}/comments`).filter((c) => !isOurs(c.body));
+  // Skip our own posts, bot noise (Vercel/CI deploy comments, etc.), and — for
+  // review comments — anything not anchored to OUR doc. Keeps the import to the
+  // human review of this document.
+  const human = (c) => !isOurs(c.body) && (c.user?.type || 'User') !== 'Bot';
+  const review = ghJSON(`repos/${repo}/pulls/${n}/comments`).filter((c) => human(c) && (!c.path || c.path.split('\\').join('/') === rel));
+  const issue = ghJSON(`repos/${repo}/issues/${n}/comments`).filter(human);
   // Every external_ref still present on the PR — anything we imported but that's now absent was
   // deleted on GitHub.
   const present = new Set([...review, ...issue].map((c) => `gh:${c.id}`));
