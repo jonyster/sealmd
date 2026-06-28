@@ -8,12 +8,14 @@ the canonical, tool-agnostic guide; the per-tool files (`.cursor/rules/…`,
 
 ## The model
 
-Two committed files per document, side by side. Local-first: the review page makes no external requests, and Slack/Teams/email notifications are opt-in (off unless you configure a webhook or key):
+Two committed files per document, side by side. Think Google-Docs-style review, but local and git-native: role-tailored summaries, anchored comments, and suggestions (propose old→new; Accept applies the change to the doc). Local-first: the review page makes no external requests, and Slack/Teams/email notifications are opt-in (off unless you configure a webhook or key):
 
 - `doc.md` — the document under review (you read & write it).
-- `doc.seal.md` — the sidecar: comments, suggestions, approvals, review state, as
+- `doc.seal.md` — the sidecar: comments and suggestions, as
   structured `json seal:<kind>` blocks. Commit both.
 - `doc.review.html` — a self-contained review page, regenerated, **gitignored**.
+
+Approval isn't tracked by the plugin. When the doc is ready, open a normal GitHub PR (`seal pr`) and let the team approve, comment on, or merge it on GitHub.
 
 ## The CLI
 
@@ -27,14 +29,13 @@ path where this repo is checked out.)
 
 | Command | What it does |
 |---|---|
-| `init --in doc.md [--owner N] [--notify git,slack,…] [--quorum N]` | Create the sidecar + notification setup. |
-| `status --in doc.md [--json]` | Review state, comments, approvals, anchor health. |
+| `init --in doc.md [--owner N] [--notify git,slack,…]` | Create the sidecar + notification setup. |
+| `status --in doc.md [--json]` | Comments, suggestions, resolve state, anchor health. |
 | `comment --in doc.md --body B [--anchor "exact span"] [--suggest "replacement"] [--mention a,b]` | File a comment/suggestion; `@name` in the body tags people. |
 | `accept --in doc.md --id ID` | **Apply a suggestion to `doc.md`** and resolve it. |
 | `dismiss --in doc.md --id ID` | Resolve/close a comment. |
 | `reply --in doc.md --id ID --body B` | Reply in a thread. |
-| `submit --in doc.md` | Put the current version up for approval (pins the version). |
-| `approve / request --in doc.md --approver A [--note N]` | Record a sign-off / change request. |
+| `pr --in doc.md` | Open a GitHub PR for the doc (approval happens there via `gh`). |
 | `summary --in doc.md --role "Label" --file s.json` | Write a role-tailored summary (see live loop). |
 | `render --in doc.md [--open]` | (Re)generate the static review page. |
 | `start --in doc.md [--port N] [--open]` | Init-if-needed **then** serve. Use this to launch — it never errors on a fresh doc. |
@@ -58,7 +59,11 @@ share* call back to you. Everything writes the local files; git is the transport
 
 ## Guarantees / non-goals
 
+The local plugin does review only — comments and suggestions. It has no
+approval / sign-off / quorum / submit concept: approval is your normal GitHub PR,
+which the team approves or merges on GitHub (Seal doesn't track that state).
+
 Content-hash–bound, tamper-**evident** (not tamper-proof — the sidecar is editable
 plaintext; git history is the real audit trail). Identity is self-asserted.
-Verified-identity approvals + a hosted shared link are the paid `seal publish`
-step, out of scope here.
+In-app, verified-identity (WebAuthn) approvals with stages/quorum + a hosted shared
+link are the paid `seal publish` step (the hosted sealmd.net tier), out of scope here.

@@ -1,11 +1,19 @@
 ---
 name: seal-review
-description: Review a Markdown document fully locally — local-first, opt-in notifications only. Maintains a doc.seal.md sidecar holding comments and review state next to doc.md, and renders a polished self-contained doc.review.html (Summary / Full doc / Markdown). Use when the user wants to review/comment on a PRD/spec/RFC locally, file or resolve comments, or open the local review page. Triggers: "review this locally", "add a comment", "open the review page", "comment on this spec", "/seal-review". NOT for the hosted/paid publish flow (that is the separate "seal" skill).
+description: Review a Markdown document fully locally — a Google-Docs-style pass over local Markdown: role-tailored summaries, anchored comments, and suggestions (propose old→new, Accept applies the edit to the doc), plus resolve/reopen. Maintains a doc.seal.md sidecar holding comments and review state next to doc.md, and renders a polished self-contained doc.review.html (Summary / Full doc / Markdown). Approval is your normal GitHub PR (open one with 'seal pr'), not anything Seal tracks. Use when the user wants to review/comment/suggest on a PRD/spec/RFC locally, file or resolve comments, or open the local review page. Triggers: "review this locally", "add a comment", "suggest an edit", "open the review page", "comment on this spec", "/seal-review". NOT for the hosted/paid publish flow with identity-verified approval (that is the separate "seal" skill).
 ---
 
 # seal-review — fully local document review (two files, local-first)
 
-seal-review turns one canonical Markdown file into a reviewable surface using
+seal-review is a **Google-Docs-style review for local Markdown**: role-tailored
+summaries, anchored **comments**, **suggestions** (propose old→new; **Accept**
+applies the edit to `doc.md`), and resolve/reopen. That is all it does for
+review — there is no sign-off, quorum, or submit step. **Approval is your normal
+GitHub PR:** open one with `seal pr` (the page also has an "Open PR" button), and
+your team approves/merges or comments on it on GitHub. Seal does not track
+approval state itself.
+
+It turns one canonical Markdown file into a reviewable surface using
 **two committed files that live side by side**:
 
 - `doc.md` — the canonical document the agent reads & writes.
@@ -24,20 +32,25 @@ normalized doc, so an edit after a comment is filed shows up as drift
 ("context changed"). This is tamper-**evident**, not tamper-proof — anyone can
 hand-edit the plaintext sidecar; **git history is the real audit trail.**
 
-Sign-off is built in: `submit` pins the version under review, then `approve` /
-`request` record decisions **bound to that submitted version**. Editing the doc
-after sign-off makes approvals **stale** (you must `submit` again) — that drift
-is the local tamper-evidence. Note: `--approver` is self-asserted, so this is
-NOT identity-verified approval — that is the hosted, paid `seal publish` step
-(the separate `seal` skill). A local file cannot verify identity.
+**Approval lives on GitHub, not in Seal.** When the review is done, open a normal
+pull request (`seal pr`, or the page's "Open PR" button — both shell out to `gh`)
+and let your team approve/merge or comment on it there. The plugin records
+comments and suggestions; it does not record approvals, request-changes, or a
+quorum. Identity-verified, in-app sign-off with stages/quorum is the hosted, paid
+`seal publish` step (the separate `seal` skill) — a local plaintext file cannot
+verify identity.
 
 ## When to use
 
-- The user wants to review a PRD/spec/RFC locally and leave comments.
-- "review this locally", "add a comment on X", "resolve that comment",
-  "open the review page", or `/seal-review`.
-- Do NOT use for hosting a review or collecting identity-verified approvals —
-  that is the hosted `seal publish` flow in the `seal` skill.
+- The user wants to review a PRD/spec/RFC locally and leave comments or
+  suggestions.
+- "review this locally", "add a comment on X", "suggest an edit", "resolve that
+  comment", "open the review page", or `/seal-review`.
+- The user wants approval/merge to happen as a normal GitHub PR — open one with
+  `seal pr`.
+- Do NOT use for hosting a review or collecting identity-verified, in-app
+  approvals with stages/quorum — that is the hosted `seal publish` flow in the
+  `seal` skill.
 
 ## The script
 
@@ -76,7 +89,8 @@ shareability + owner status to stderr — **act on it**:
 - **Not a git repo** → the review is *local only, not shareable*. Tell the user;
   offer to `git init` so the sidecar can be committed and shared.
 - **Owner unknown** (no `--owner`, no `git config user.name`) → **ask the user who
-  owns sign-off**, then pass `--owner "Name"`.
+  owns the doc** (who reviewers should address and @mention), then pass
+  `--owner "Name"`.
 - Always remind the user to **commit `doc.md` + `doc.seal.md`** so every
   collaborator sees the review. The sidecar is the shareable artifact — git is
   the transport. (The `*.review.html` is derived and gitignored.)
@@ -89,10 +103,10 @@ shareability + owner status to stderr — **act on it**:
 | `status --in doc.md [--json]` | Review state, open/resolved counts, and **anchor health** (which comments lost their quoted span). Start here. |
 | `comment --in doc.md --body B [--author A] [--anchor "exact span"] [--suggest "replacement"]` | File a comment. `--anchor` must be an **exact, unique** substring of the doc (copy it verbatim, including any markdown like `**bold**`); omit it for a document-level comment. `--suggest` (requires `--anchor`) records a proposed replacement, rendered as a del→ins diff. |
 | `reply --in doc.md --id ID --body B [--author A]` | Reply in a comment's thread. |
-| `resolve --in doc.md --id ID` / `reopen --in doc.md --id ID` | Toggle a comment's status. |
-| `submit --in doc.md` | Put the current version up for review (pins the version approvals bind to). Run before collecting approvals, and again after revising. |
-| `approve --in doc.md --approver A [--note N]` | Record an approval of the submitted version. Reaches `approved` at quorum (default 1) with no outstanding change-request. |
-| `request --in doc.md --approver A --note N` | Request changes on the submitted version (a current request vetoes `approved`). |
+| `resolve --in doc.md --id ID` / `reopen --in doc.md --id ID` | Toggle a comment's status (`dismiss` is an alias of `resolve`). |
+| `accept --in doc.md --id ID` | Apply a suggestion's proposed replacement to `doc.md` (the old→new edit), then re-render. This is how a suggestion lands in the document. |
+| `commit --in doc.md [--message M]` | Commit `doc.md` + `doc.seal.md` with `git` so collaborators (and any PR) see the review. |
+| `pr --in doc.md [--title T] [--base B]` | Open a normal **GitHub pull request** via `gh` — this is approval. Your team approves/merges/comments on it on GitHub; Seal does not track its state. |
 | `render --in doc.md [--out f.html] [--summary s.json] [--open]` | (Re)generate the static page. `--open` opens it. |
 | `serve --in doc.md [--port N] [--open] [--notify-cmd CMD]` | **Live** review on `127.0.0.1` only. The page POSTs comments/suggestions and the engine writes the sidecar directly (no copy-paste). Each mutation streams as a `SEAL_EVENT` line on stdout — see the bridge below. |
 | `hash --in doc.md` | Print the bare-hex content hash. |
@@ -289,21 +303,28 @@ also fires Slack/Teams/email to the mentioned people **and** the owner.
 ### Notifying the document owner
 
 The owner (set at `init`) gets notified on the configured channel for every new
-comment / change-request / approval — immediately, or batched if
+comment / suggestion — immediately, or batched if
 `--digest-interval` is set. With no channel configured, the git path still works:
 committing the sidecar surfaces everything in `git pull` / the PR, and
 `template/hooks/post-merge` prints `status` after a pull. Identity-verified,
 guaranteed delivery is the hosted `seal publish` step.
 
-### Approval flow
+### Approval = a GitHub PR
 
-`init` → file comments → `submit` (pins the version) → reviewers `approve` /
-`request` → status derives `approved` / `changes_requested`. Approvals bind to
-the **submitted** version: if the doc changes, `approve`/`request` refuse until
-you `submit` again, and the page/status show prior sign-offs as **stale**. State
-is always **derived** from the records, never trusted from the stored cache — a
-forged "approved" cache value is re-checked against the live hash on every read.
-Set `--quorum N` at `init` to require N distinct approvers.
+The local plugin does **not** have its own approval, sign-off, request-changes,
+quorum, or submit step. When the review is done, approval happens the way it
+already does on your team — as a **pull request**:
+
+`init` → file comments / suggestions → **Accept** the suggestions you want into
+`doc.md` → resolve the threads → `seal commit` → **`seal pr`** (or the page's
+"Open PR" button). Both shell out to `gh` to open a normal GitHub PR; your team
+then approves, merges, or comments on it on GitHub. Seal tracks the comments and
+suggestions in the sidecar (and git history is the audit trail), but it does
+**not** track approval state — GitHub does.
+
+> Want in-app, identity-verified (WebAuthn) approval with stages and quorum? That
+> is the hosted, paid `seal publish` flow (the separate `seal` skill), not the
+> local plugin.
 
 ## Non-goals (deferred / explicitly not supported)
 

@@ -4,7 +4,7 @@
 
 ### Get the right people to actually review what your agent wrote.
 
-*Point sealmd at any agent-written Markdown doc — PRD, spec, RFC, contract — and it becomes a clean review page right in your repo. Each reviewer gets an AI summary written for their role, jumps to the slice that's theirs, comments, and approves — and your git stays the source of truth, with approved changes committing straight back. No copy-paste, no chasing sign-off in Slack.*
+*Point sealmd at any agent-written Markdown doc — PRD, spec, RFC, contract — and it becomes a clean review page right in your repo. Each reviewer gets an AI summary written for their role, jumps to the slice that's theirs, comments, and suggests edits — and your git stays the source of truth, with accepted changes committing straight back. Sign-off is your normal GitHub PR. No copy-paste, no chasing review in Slack.*
 
 <br>
 
@@ -26,23 +26,23 @@
 
 ## Why
 
-Your agent writes a PRD, a spec, an RFC. Then a human has to **actually approve it** — and a 6,000-word doc nobody reads is a rubber stamp, not a review.
+Your agent writes a PRD, a spec, an RFC. Then a human has to **actually read it** — and a 6,000-word doc nobody reads is a rubber stamp, not a review.
 
 **sealmd** makes that review real, without a SaaS or an account — and **your git stays the source of truth**:
 
 - **A doc, not a dashboard** — a calm, paper-feeling page a busy reviewer reads in minutes.
 - **~90-second summary your agent tailors to each reviewer's role** — Compliance sees compliance, Eng sees architecture (a generic one renders if you skip it).
-- **Comment & suggest right on the text** — select a span, leave a note or a proposed edit; **Accept** commits the change straight back.
-- **Content-bound decisions** — approvals bind to the doc's content hash and go **stale** the moment the text changes.
+- **Comment & suggest right on the text** — select a span, leave a note or a proposed edit; **Accept** commits the change straight back. Google-Docs-style review, in your repo.
+- **Sign-off is your PR** — when the doc's ready, open a GitHub PR (`seal pr`) and your team approves or comments on it on GitHub. Seal doesn't invent its own approval state.
 - **No lock-in** — it's two Markdown files in your repo. Diff them, commit them, own them.
 
-> The local tier is **honest, not cryptographic**: authors are self-asserted and the sidecar is editable text — `git diff` and git history are the audit trail. Verified identity + a hosted shared link are the paid `seal publish` step. Everything else is right here, free.
+> The local tier is **honest, not cryptographic**: authors are self-asserted and the sidecar is editable text — `git diff` and git history are the audit trail. Verified identity + an in-app, identity-verified approval workflow are the paid `seal publish` step. Everything else is right here, free.
 
 ---
 
 ## Who it's for
 
-Anyone whose **agent produces docs that other people need to review and approve** — you run the agent (Claude Code, Cursor, Codex, Copilot); the reviewers just open a page (engineers can open a PR instead). You don't have to be an engineer; you do have to run an agent.
+Anyone whose **agent produces docs that other people need to review** — you run the agent (Claude Code, Cursor, Codex, Copilot); the reviewers just open a page, comment, and suggest. When it's time to sign off, open a GitHub PR. You don't have to be an engineer; you do have to run an agent.
 
 ---
 
@@ -50,7 +50,7 @@ Anyone whose **agent produces docs that other people need to review and approve*
 
 ```
 spec.md            the document under review                              ← committed
-spec.seal.md       the sidecar: comments, suggestions, approvals, state   ← committed
+spec.seal.md       the sidecar: comments, suggestions, state             ← committed
 spec.review.html   a self-contained review page                          ← generated, gitignored
 ```
 
@@ -70,7 +70,7 @@ In **Claude Code** (or Cursor / Codex / Copilot), just say:
 your role, and how to share, then opens the live review. **Existing doc** → it
 just opens it. (`/seal-new` and `/seal-open` are the explicit versions.)
 
-In the page → pick a **role** for a tailored summary → select text to **Comment / Suggest** → **Accept** a suggestion (it rewrites `spec.md`) → **Approve**.
+In the page → pick a **role** for a tailored summary → select text to **Comment / Suggest** → **Accept** a suggestion (it rewrites `spec.md`). When the doc's ready, open a GitHub PR (`seal pr`) and your team signs off there.
 
 #### Install
 ```
@@ -86,7 +86,7 @@ In the page → pick a **role** for a tailored summary → select text to **Comm
 ENG="node /path/to/sealmd/skills/seal-review/scripts/seal.mjs"
 $ENG start   spec.md                             # init-if-needed + open live review
 $ENG comment --in spec.md --body "tighten scope" --anchor "exact span" --mention alice
-$ENG submit  --in spec.md && $ENG approve --in spec.md --approver lead --note "LGTM"
+$ENG pr      --in spec.md                         # open a GitHub PR for sign-off (via gh)
 ```
 </details>
 
@@ -118,7 +118,7 @@ flowchart TD
     G["🔀 git / PR"]
     X["📣 GitHub · Slack · Email"]
 
-    H -->|"comment · suggest · @tag · approve"| S
+    H -->|"comment · suggest · @tag"| S
     S -->|"writes"| F
     F -->|"commit"| G
     S <-->|"SEAL_EVENT ⇄ role summary"| A
@@ -136,7 +136,8 @@ The review server binds `127.0.0.1` and token-authenticates every action. The pa
 | **Role-tailored summaries** | Pick or type a role; your agent writes the digest for it. A generic summary renders with no agent. |
 | **Anchored comments** | Select text → comment. Click a highlight → jump to its comment, and back. |
 | **Suggestions** | Propose `old → new`; **Accept** applies it straight to `spec.md`. |
-| **Approvals** | Submit → approve / request changes, quorum, auto-stale on edit. |
+| **Resolve / reopen** | Mark a comment thread resolved, or reopen it. |
+| **Sign-off via PR** | When the doc's ready, open a GitHub PR (`seal pr`, via local `gh`); your team approves/merges it on GitHub. |
 | **@mentions** | Tag people (auto-scraped from the doc); notify via git, Slack, Teams, email. |
 | **Share** | A GitHub PR (via local `gh`), a portable HTML file, or a paid hosted link. |
 | **Dark by default** | Calm-paper light + dark, remembers your choice. |
@@ -145,9 +146,9 @@ The review server binds `127.0.0.1` and token-authenticates every action. The pa
 
 ## What it does — and doesn't
 
-**Does** — content-bound comments/approvals (sha256 of the normalized doc), automatic drift detection on edit, parity-frozen hashing, and a self-contained offline review **file** that makes no network calls of its own.
+**Does** — anchored comments and suggestions on the live text, **Accept** that rewrites `spec.md`, resolve/reopen threads, role-tailored summaries, and a self-contained offline review **file** that makes no network calls of its own.
 
-**Doesn't** — verify identity (authors are self-asserted), make the sidecar immutable (it's editable text — `git diff` is the backstop), or guarantee notification delivery. Cryptographic identity and a real shared link are the hosted `seal publish` boundary.
+**Doesn't** — verify identity (authors are self-asserted), make the sidecar immutable (it's editable text — `git diff` is the backstop), track its own approval state (sign-off is your GitHub PR), or guarantee notification delivery. Cryptographic identity and an in-app, identity-verified approval workflow are the hosted `seal publish` boundary.
 
 > Two honest caveats: (1) the offline guarantee is about the generated `spec.review.html` **file** — while `seal serve` runs it is a local web server (loopback-bound and token-authenticated, but a server); (2) "no network calls" means none of its own — external images or links you put in the doc still load on open.
 
@@ -179,6 +180,6 @@ Fuzzy anchor relocation · `seal watch` auto-refresh · committed-HTML mode · g
 
 **MIT** · built to be forked · PRs welcome
 
-*For the agents that write the docs — and the people who sign off on them.*
+*For the agents that write the docs — and the people who review them.*
 
 </div>

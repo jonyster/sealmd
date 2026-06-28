@@ -12,7 +12,8 @@
 // No server, no network. Comments bind to the sha256 content hash of the
 // normalized doc, so a later edit is visible as drift (tamper-EVIDENT, not
 // tamper-proof — anyone can hand-edit the plaintext sidecar; git is the real
-// audit trail). Approvals/sign-off are a later phase (v1.1).
+// audit trail). Approval lives in the user's GitHub PR (`seal pr`), not in
+// this engine — Seal does not track approval state locally.
 //
 // Zero dependencies. ESM. Importable (guarded entrypoint).
 //
@@ -192,10 +193,9 @@ function upsertSummaryRole(doc, roleObj) {
 
 // ---- canonical serializers (fixed key order per kind => stable diffs) ------
 const KEY_ORDER = {
-  document: ['kind', 'seal_schema_version', 'normalization_version', 'source', 'title', 'owner', 'notify', 'quorum', 'created_at'],
+  document: ['kind', 'seal_schema_version', 'normalization_version', 'source', 'title', 'owner', 'notify', 'created_at'],
   state: ['kind', 'status', 'content_hash', 'updated_at'],
   comment: ['kind', 'id', 'author', 'anchor', 'suggestion', 'accepted', 'mentions', 'body', 'status', 'content_hash', 'created_at', 'thread'],
-  approval: ['kind', 'id', 'approver', 'decision', 'content_hash', 'note', 'created_at'],
 };
 function canon(kind, obj) {
   const order = KEY_ORDER[kind];
@@ -211,10 +211,6 @@ function humanLine(kind, o) {
     const kindLabel = o.suggestion != null ? 'suggestion' : 'comment';
     const cc = o.mentions && o.mentions.length ? ' · cc ' + o.mentions.map((m) => '@' + m.handle).join(' ') : '';
     return `**${o.author}** · ${kindLabel} · ${o.status}${q}${cc} — ${o.body.replace(/\n/g, ' ').slice(0, 60)}`;
-  }
-  if (kind === 'approval') {
-    const verb = o.decision === 'approved' ? 'approved' : 'requested changes';
-    return `**${o.approver}** · ${verb} \`${SHORT(o.content_hash)}\`${o.note ? ' — ' + o.note.replace(/\n/g, ' ').slice(0, 50) : ''}`;
   }
   return '';
 }
@@ -234,6 +230,9 @@ function parseSidecar(text, sp) {
     die(`sidecar ${sp}: a seal record exists OUTSIDE the ${BEGIN}/${END} guard — refusing to write (it would be dropped). Move it inside the guard or remove it.`);
   const region = text.slice(a + BEGIN.length, b);
   const re = /```json seal:([a-z]+)\n([\s\S]*?)\n```/g;
+  // `approvals` is kept as an always-empty array for back-compat with callers that
+  // still read r.approvals during the transition. Legacy seal:approval records are
+  // parsed-and-ignored (approval now lives in the GitHub PR), never re-emitted.
   const records = { document: null, state: null, comments: [], approvals: [] };
   const seen = new Set();
   let m, idx = 0;
@@ -251,10 +250,8 @@ function parseSidecar(text, sp) {
       seen.add(obj.id);
       records.comments.push(obj);
     } else if (label === 'approval') {
-      if (!obj.id) die(`sidecar ${sp}: approval #${idx} has no id. Refusing to write.`);
-      if (seen.has(obj.id)) die(`sidecar ${sp}: duplicate id ${obj.id}. Refusing to write.`);
-      seen.add(obj.id);
-      records.approvals.push(obj);
+      // legacy approval record — parsed and ignored (approval now lives in the
+      // GitHub PR). Intentionally NOT stored, so it is dropped on the next rewrite.
     } else die(`sidecar ${sp}: unknown record kind "${label}" #${idx}. Refusing to write.`);
     idx++;
   }
@@ -293,10 +290,6 @@ function renderSidecar(r) {
   L.push('');
   if (r.comments.length === 0) L.push('_No comments yet._');
   for (const cm of r.comments) { L.push(block('comment', cm)); L.push(''); }
-  L.push('## Approvals');
-  L.push('');
-  if (r.approvals.length === 0) L.push('_No approvals yet._');
-  for (const ap of r.approvals) { L.push(block('approval', ap)); L.push(''); }
   L.push(END);
   L.push('');
   return L.join('\n').replace(/\n{3,}/g, '\n\n');
@@ -341,59 +334,6 @@ function resolveAnchor(anchor, normDoc) {
   return 'unanchored';
 }
 
-// ---- state machine (v1.1 approvals) ---------------------------------------
-// State is DERIVED from records + the submitted version, never trusted from the
-// stored cache. Approvals bind to state.content_hash (the SUBMITTED version), so
-// editing the doc after sign-off does not silently keep "approved".
-//   draft        never submitted
-//   in_review    submitted, quorum not yet met, no current veto
-//   changes_requested  a current reviewer requested changes
-//   approved     >= quorum distinct current approvals, zero current vetoes
-// One human = one vote. Key identity case/whitespace-insensitively so "alice"
-// and "alice " can't both count toward quorum.
-const normId = (s) => String(s || '').trim().toLowerCase();
-function latestPerReviewer(approvals, stateHash) {
-  // keep only decisions bound to the submitted version, latest per approver
-  const current = approvals.filter((a) => a.content_hash === stateHash);
-  const byReviewer = new Map();
-  for (const a of current) {
-    const key = normId(a.approver);
-    const prev = byReviewer.get(key);
-    if (!prev || a.created_at > prev.created_at) byReviewer.set(key, a);
-  }
-  return [...byReviewer.values()];
-}
-function deriveStatus(r) {
-  if (r.state.status === 'draft') return 'draft';            // never submitted
-  const latest = latestPerReviewer(r.approvals, r.state.content_hash);
-  if (latest.some((a) => a.decision === 'changes_requested')) return 'changes_requested';
-  const approves = latest.filter((a) => a.decision === 'approved').length;
-  const quorum = r.document.quorum || 1;
-  if (approves >= quorum) return 'approved';
-  return 'in_review';
-}
-function approvalState(r, live) {
-  const stateHash = r.state.content_hash;
-  const status = deriveStatus(r);
-  const latest = latestPerReviewer(r.approvals, stateHash);
-  const quorum = r.document.quorum || 1;
-  const approves = latest.filter((a) => a.decision === 'approved').length;
-  const vetoes = latest.filter((a) => a.decision === 'changes_requested').map((a) => a.approver);
-  const docMatchesSubmitted = stateHash === live;     // false => doc edited after submit
-  return {
-    status, quorum, approves, vetoes,
-    approved_for_current_version: status === 'approved' && docMatchesSubmitted,
-    doc_edited_after_submit: !docMatchesSubmitted && r.state.status !== 'draft',
-    // mark each stored approval current/superseded for display
-    approvals: r.approvals.map((a) => ({
-      ...a,
-      current: a.content_hash === stateHash,
-      // a current approval is "valid for the live doc" only if the submitted version is still live
-      valid_now: a.content_hash === stateHash && docMatchesSubmitted,
-    })),
-  };
-}
-
 // ---- build the review page (HTML string) ----------------------------------
 function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   const md = normalizeMarkdown(readDoc(doc));
@@ -420,7 +360,6 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
   const genericSummary = !roles.length;
   if (genericSummary) roles = [{ role: 'General', ...deriveSummary(md, wordCount) }];
   const comments = r.comments.map((cm) => ({ ...cm, anchor_status: resolveAnchor(cm.anchor, md) }));
-  const review = approvalState(r, ch);
   let srcUrl = null;
   try { srcUrl = pathToFileURL(realpathSync(doc)).href; } catch {}
   // Canonical reviewer-role taxonomy — identical to ai/summary.mjs REVIEWER_ROLES /
@@ -458,7 +397,7 @@ function buildPage(doc, r, { mode = 'static', token = '' } = {}) {
     roles, curatedRoles, reviewerRole: (roles[0] && roles[0].role) || 'General',
     people, canCommit: git.inRepo, gitRemote: git.remote, autoCommit: AUTO_COMMIT, dirty: gitDirty(doc, git),
     canPR: git.inRepo && !!git.remote && ghReady(),
-    mdRaw: md, contentHash: ch, wordCount, comments, review, mode, token, generic: genericSummary,
+    mdRaw: md, contentHash: ch, wordCount, comments, mode, token, generic: genericSummary,
     renderedAt: 'rendered ' + nowISO(),
   });
 }
@@ -592,7 +531,6 @@ function initSidecar(doc, { force = false } = {}) {
       kind: 'document', seal_schema_version: SCHEMA_VERSION, normalization_version: NORM_VERSION,
       source, title: arg('title') || (h1 ? h1[1].replace(/[*_`]/g, '').trim() : source.replace(/\.md$/i, '')),
       owner, notify: channels.length ? channels : undefined,
-      quorum: Math.max(1, parseInt(arg('quorum') || '1', 10) || 1),
       created_at: now,
     },
     state: { kind: 'state', status: 'draft', content_hash: h, updated_at: now },
@@ -624,7 +562,7 @@ function cmdStart() {
   // shareability guidance (the agent reads stderr; surfaces to the user)
   if (!git.inRepo) console.error('⚠  Not a git repo — this review is LOCAL ONLY (not shareable). `git init`, then commit doc.md + the .seal.md so others can view it.');
   else console.error(`✓  git repo${git.remote ? ' (' + git.remote + ')' : ''} — commit ${basename(doc)} + ${basename(sp)} so collaborators can view the review.`);
-  if (!owner) console.error('⚠  No owner set, and git has no user.name. Set one: `--owner "Name"` (or `git config user.name`). Ask the user who owns sign-off.');
+  if (!owner) console.error('⚠  No owner set, and git has no user.name. Set one: `--owner "Name"` (or `git config user.name`). The owner is the doc author / notify target.');
   else console.error(`👤 Owner: ${owner}${initRes ? ` (from ${initRes.ownerSource})` : ''}.`);
   START_OPEN = true;
   cmdServe();
@@ -673,8 +611,7 @@ function coreSetStatus(doc, { id, status }) {
   return { cm, sp, r };
 }
 // Accept a suggestion: apply its replacement to the DOC (doc.md) and resolve it.
-// Edits the markdown file — the content hash changes, anchors re-resolve, and any
-// approvals on the old version go stale (correct: the doc changed).
+// Edits the markdown file — the content hash changes and anchored comments re-resolve.
 function coreAccept(doc, { id }) {
   const { sp, r } = loadSidecar(doc);
   const cm = findComment(r, id);
@@ -710,28 +647,6 @@ function coreSaveDoc(doc, { markdown }) {
   return { content_hash: contentHash(markdown) };
 }
 
-function coreSubmit(doc) {
-  const { sp, r } = loadSidecar(doc);
-  const h = liveHash(doc);
-  r.state = { kind: 'state', status: 'in_review', content_hash: h, updated_at: nowISO() };
-  writeSidecar(sp, r);
-  return { sp, r, content_hash: h };
-}
-function coreDecision(doc, { decision, approver, note }) {
-  const { sp, r } = loadSidecar(doc);
-  if (r.state.status === 'draft') throw new Error('nothing submitted yet — submit before collecting approvals');
-  const live = liveHash(doc);
-  if (live !== r.state.content_hash) throw new Error('doc has changed since submit — submit again before approving');
-  if (!approver) throw new Error('approver is required');
-  if (decision === 'changes_requested' && !note) throw new Error('a note is required when requesting changes');
-  r.approvals = r.approvals.filter((a) => !(normId(a.approver) === normId(approver) && a.content_hash === r.state.content_hash));
-  const ap = { kind: 'approval', id: rid('a'), approver, decision, content_hash: r.state.content_hash, note: note || null, created_at: nowISO() };
-  r.approvals.push(ap);
-  r.state = { ...r.state, status: deriveStatus(r), updated_at: nowISO() };
-  writeSidecar(sp, r);
-  return { ap, sp, r, status: r.state.status };
-}
-
 // ---- CLI wrappers ----------------------------------------------------------
 function cmdComment() {
   const doc = docPath();
@@ -752,25 +667,12 @@ function cmdSetStatus(status) {
   const html = regen(doc, r); maybeOpen(html);
   out({ ok: true, action: status === 'resolved' ? 'resolve' : 'reopen', id: cm.id, html });
 }
-function cmdSubmit() {
-  const doc = docPath();
-  const { r, content_hash } = coreSubmit(doc);
-  const html = regen(doc, r); maybeOpen(html);
-  out({ ok: true, action: 'submit', status: 'in_review', content_hash, html });
-}
 function cmdAccept() {
   const doc = docPath();
   const { cm, r } = coreAccept(doc, { id: arg('id') });
   const html = regen(doc, r); maybeOpen(html);
   out({ ok: true, action: 'accept', id: cm.id, content_hash: liveHash(doc), html });
 }
-function cmdDecision(decision) {
-  const doc = docPath();
-  const { ap, r, status } = coreDecision(doc, { decision, approver: arg('approver'), note: arg('note') });
-  const html = regen(doc, r); maybeOpen(html);
-  out({ ok: true, action: decision, id: ap.id, status, content_hash: ap.content_hash, html });
-}
-
 function cmdRender() {
   const doc = docPath();
   const { r } = loadSidecar(doc);
@@ -1109,7 +1011,7 @@ function cmdServe() {
       }
       if (req.method === 'GET' && url.pathname === '/api/state') {
         const { r } = loadSidecar(doc);
-        return J(res, 200, { ok: true, status: deriveStatus(r), comments: r.comments.length, auto_commit: AUTO_COMMIT });
+        return J(res, 200, { ok: true, comments: r.comments.length, auto_commit: AUTO_COMMIT });
       }
       // commit + push the review from the page
       if (req.method === 'POST' && url.pathname === '/api/commit') {
@@ -1283,36 +1185,20 @@ function cmdStatus() {
   const { r } = loadSidecar(doc);
   const md = normalizeMarkdown(readDoc(doc));
   const live = contentHash(md);
-  const driftFromState = r.state.content_hash !== live;
   const comments = r.comments.map((cm) => ({ ...cm, anchor_status: resolveAnchor(cm.anchor, md) }));
   const open = comments.filter((cm) => cm.status === 'open');
   const unanchored = comments.filter((cm) => cm.anchor && cm.anchor_status !== 'here');
-  const review = approvalState(r, live);
   const summary = {
     ok: true, action: 'status', title: r.document.title, source: r.document.source,
-    status: review.status, live_hash: live, state_hash: r.state.content_hash,
-    doc_edited_after_submit: review.doc_edited_after_submit,
+    content_hash: live,
     comments: { total: comments.length, open: open.length, resolved: comments.length - open.length },
     unanchored_comments: unanchored.length,
-    approvals: {
-      quorum: review.quorum, approved: review.approves, vetoes: review.vetoes,
-      approved_for_current_version: review.approved_for_current_version,
-    },
     html: htmlPath(doc),
   };
   if (flag('json')) { out(summary); return; }
-  const driftAfterSubmit = review.doc_edited_after_submit;
   const L = [];
   L.push(`${c('1', '📄 ' + summary.title)}  ${c('2', '(' + summary.source + ')')}`);
-  const statusColor = review.status === 'approved' ? '32' : review.status === 'changes_requested' ? '33' : '35';
-  L.push(`   state:    ${c(statusColor, review.status)}   hash ${c('2', SHORT(live))}${driftAfterSubmit ? c('33', '  ⚠ doc edited since submit') : ''}`);
-  // approvals line
-  if (r.state.status !== 'draft' || review.approvals.length) {
-    const av = `${review.approves}/${review.quorum} approval${review.quorum === 1 ? '' : 's'}`;
-    const veto = review.vetoes.length ? c('33', `  · changes requested by ${review.vetoes.join(', ')}`) : '';
-    const stale = driftAfterSubmit ? c('33', '  · ⚠ pinned to an older version (stale)') : '';
-    L.push(`   approvals:${' '}${review.status === 'approved' && review.approved_for_current_version ? c('32', '✅ ' + av) : av}${veto}${stale}`);
-  }
+  L.push(`   hash ${c('2', SHORT(live))}`);
   L.push(`   comments: ${c('1', open.length)} open / ${comments.length} total`);
   for (const cm of open) {
     const tag = cm.anchor_status === 'unanchored' ? c('33', '⚠ context changed') : cm.anchor ? c('32', 'anchored') : c('2', 'doc-level');
@@ -1331,9 +1217,9 @@ function cmdDoctor() {
   if (!existsSync(sp)) die(`no sidecar at ${sp}`);
   // parseSidecar already fails loud on any structural problem; reaching here = OK.
   const r = parseSidecar(readFileSync(sp, 'utf8'), sp);
-  const res = { ok: true, action: 'doctor', sidecar: sp, records: { comments: r.comments.length, approvals: r.approvals.length }, valid: true };
+  const res = { ok: true, action: 'doctor', sidecar: sp, records: { comments: r.comments.length }, valid: true };
   if (flag('json')) { out(res); return; }
-  console.log(c('32', `✓ ${sp} is well-formed`) + ` · ${r.comments.length} comment(s) · ${r.approvals.length} approval(s)`);
+  console.log(c('32', `✓ ${sp} is well-formed`) + ` · ${r.comments.length} comment(s)`);
 }
 
 // ===========================================================================
@@ -1342,16 +1228,13 @@ const USAGE = `seal-review — fully local, two-file document review (doc.md + d
 Usage: node seal.mjs <command> --in <doc.md> [opts]
 
   init      create the sidecar + notification setup
-            [--title T] [--quorum N] [--owner "Name"] [--notify git,slack,teams,email]
+            [--title T] [--owner "Name"] [--notify git,slack,teams,email]
             [--slack-webhook URL] [--teams-webhook URL] [--email-to ADDR] [--digest-interval SECS] [--force]
-  status    review state, comments, approvals, anchors      [--json]
+  status    comments + anchors      [--json]
   start     <doc.md>   the one command: init if needed (owner from git) + open live review
   comment   --body B [--author A] [--anchor "exact span"] [--suggest "replacement"] [--mention name,name]
   reply     --id ID --body B [--author A]
   resolve   --id ID            reopen --id ID
-  submit    put the current version up for review (pins the version)
-  approve   --approver A [--note N]      record an approval of the submitted version
-  request   --approver A --note N        request changes on the submitted version
   render    [--out f.html] [--summary s.json] [--open]
   serve     live local review — the page writes the sidecar  [--port N] [--open] [--notify-cmd CMD]
   summary   write a role-tailored summary  --role "Label" [--file j.json | --json '…' | stdin]
@@ -1360,9 +1243,10 @@ Usage: node seal.mjs <command> --in <doc.md> [opts]
   hash      print bare-hex content hash
   doctor    validate the sidecar (read-only)               [--json]
 
-Flow: init → submit → approve/request. Approvals bind to the SUBMITTED version;
-editing the doc after submit makes them stale until you submit again. Mutating
-commands auto-render unless --no-render. Sidecar defaults to <doc>.seal.md.`;
+Flow: comment / suggest / resolve on the doc locally. To get approval, open a PR
+(\`seal pr\`) and have the team approve or merge it on GitHub — Seal does not track
+approval state locally. Mutating commands auto-render unless --no-render.
+Sidecar defaults to <doc>.seal.md.`;
 
 function run() {
   const cmd0 = process.argv[2];
@@ -1378,9 +1262,6 @@ function run() {
       case 'resolve': case 'dismiss': cmdSetStatus('resolved'); break;
       case 'reopen': cmdSetStatus('open'); break;
       case 'accept': cmdAccept(); break;
-      case 'submit': cmdSubmit(); break;
-      case 'approve': cmdDecision('approved'); break;
-      case 'request': cmdDecision('changes_requested'); break;
       case 'render': cmdRender(); break;
       case 'serve': cmdServe(); break;
       case 'summary': cmdSummary(); break;

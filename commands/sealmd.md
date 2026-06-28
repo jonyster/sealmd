@@ -7,8 +7,16 @@ Be conversational — ask one question at a time, use sensible defaults, never d
 the whole list at once.
 
 **Plain language:** to the user, call `<doc>.seal.md` **"the review file"** (it
-holds the comments + sign-offs, lives next to the doc, commit it). Never say
+holds the comments + suggestions, lives next to the doc, commit it). Never say
 "sidecar" — it's jargon. Same for other internal terms below.
+
+**What this is:** a Google-Docs-style **local** Markdown review — role-tailored
+summaries, anchored **comments**, **suggestions** (propose old→new; Accept applies
+the edit to the doc), and resolve/reopen. That's the whole review surface. There's
+**no approval / sign-off / quorum / submit** here. **Approval = a normal GitHub
+PR:** open one (`seal pr`) and your team reviews/approves/merges it on GitHub. Seal
+doesn't track approval state itself. (The hosted tier — `seal publish` /
+sealmd.net — is what has the in-app, identity-verified approval workflow.)
 
 ENGINE (use ONLY this — the sealmd plugin's CLI):
 `node "${CLAUDE_PLUGIN_ROOT}/skills/seal-review/scripts/seal.mjs"` (fallback: the
@@ -66,8 +74,8 @@ and offer `/seal new DOC`.)
    it from the doc (frontmatter `author:`/`owner:` or an "Author:" line); if the
    doc has none, it falls back to the git user. **Confirm: "Owner = *<detected>*?"**
    — and if the doc was published by someone else (e.g. an external repo) make sure
-   the owner is *that* author, not you. If nothing's detected, **ask who owns
-   sign-off**. (Override with `--owner "Name"`.)
+   the owner is *that* author, not you. If nothing's detected, **ask who the doc's
+   author is**. (Override with `--owner "Name"`.)
 3. **Your role** — **ask: "What's your role for this review?"** (Compliance, Eng,
    PM, Legal, a job title — anything). You'll generate that role's summary so
    their view is tailored from the first open.
@@ -97,9 +105,10 @@ and offer `/seal new DOC`.)
 
 ## While people review
 
-After a new batch of comments/approvals (or when the user's done), **commit
+After a new batch of comments/suggestions (or when the user's done), **commit
 again** with **`seal commit DOC --push`**. Each commit is what collaborators pull
-to see the latest review.
+to see the latest review. When the doc is ready to ship, open a PR with **`seal
+pr`** — approval happens there, on GitHub.
 
 ## While it's open
 
@@ -107,6 +116,6 @@ to see the latest review.
   `summary_request` — generate it (`seal summary …`) or run `seal pending --in DOC`
   to drain any you missed. The page also gives them a **Copy `/seal-role`** button.
 - Advanced (power users): `/seal-review`, `/seal-role`, and the CLI directly —
-  `status`, `comment`, `accept`, `dismiss`, `submit`, `approve`, `share`.
+  `status`, `comment`, `accept`, `dismiss`, `share`, `pr`.
 
 That's it: **`/seal` is the only command most users need.**

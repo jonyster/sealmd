@@ -134,14 +134,12 @@ export async function sendEmailRich(email, { to, subject, text, attachments = []
 
 // ---- message formatting ----------------------------------------------------
 export function formatEvent(ev, link) {
-  const who = ev.author || ev.approver || 'someone';
+  const who = ev.author || 'someone';
   const cc = ev.mentions && ev.mentions.length ? `  ·  cc ${ev.mentions.map((m) => '@' + m.handle).join(' ')}` : '';
   const where = ev.anchor ? ` on “${String(ev.anchor).slice(0, 60)}”` : '';
   let head;
   if (ev.type === 'suggestion') head = `✎ *${who}* suggested an edit${where}`;
   else if (ev.type === 'comment') head = `💬 *${who}* commented${where}`;
-  else if (ev.type === 'changes_requested') head = `✏️ *${who}* requested changes`;
-  else if (ev.type === 'approved') head = `✅ *${who}* approved`;
   else if (ev.type === 'reply') head = `↩︎ *${who}* replied`;
   else head = `• ${ev.type}`;
   const body = ev.body || ev.note || '';

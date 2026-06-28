@@ -345,7 +345,6 @@ function minimalOpts(overrides = {}) {
       { value: 'general', label: 'General' },
     ],
     comments: [],
-    review: null,
     mode: 'static',
     people: [],
     ...overrides,
@@ -466,17 +465,6 @@ test('renderReviewPage embeds client JSON with < escaped to prevent </script> br
 test('renderReviewPage with empty comments shows the empty-rail message', () => {
   const html = renderReviewPage(minimalOpts({ comments: [] }));
   assert.ok(html.includes('No comments or suggestions yet'));
-});
-
-test('renderReviewPage with a non-null draft review does not throw and shows a badge', () => {
-  const review = {
-    status: 'in_review', approves: 1, quorum: 2, vetoes: 0,
-    approved_for_current_version: false, doc_edited_after_submit: false,
-    approvals: [],
-  };
-  let html;
-  assert.doesNotThrow(() => { html = renderReviewPage(minimalOpts({ review })); });
-  assert.ok(html.includes('In review'));
 });
 
 // ===========================================================================
