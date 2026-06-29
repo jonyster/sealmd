@@ -11,8 +11,10 @@ Open the existing review for a doc. Engine:
 yes/no-confirm one guess.** If `$ARGUMENTS` has a `.md` path or git URL, use it;
 otherwise present (4 slots + auto "Other"; **always reserve "Git link / URL" and
 "Browse local files"**):
-- **Docs that already have a review** (≤2) — glob `*.seal.md` and list the matching
-  `.md` docs (the openable ones).
+- **Docs that already have a review** — find `*.seal.md` in **one pass**: search the
+  current project dir **and** wider (`$HOME` recursively, e.g. `find ~ -name '*.seal.md'`)
+  together, not project-first-then-wider. **Sort by mtime, most recent first**, and list
+  the top matching `.md` docs (the openable ones) — most recently touched at the top.
 - **"Git link / URL"** (always) — paste a repo URL; `git clone` it and open the
   review inside the clone.
 - **"Browse local files"** (always) — list/`ls` `*.seal.md` reviews to navigate, or
