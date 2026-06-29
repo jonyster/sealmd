@@ -77,6 +77,11 @@ In the page → pick a **role** for a tailored summary → select text to **Comm
 /plugin marketplace add jonyster/sealmd
 /plugin install sealmd@sealmd
 ```
+**Update to the latest** (restart alone won't fetch new versions — refresh the marketplace cache first):
+```
+/plugin marketplace update sealmd
+/plugin                            # sealmd → Update, then restart
+```
 **Cursor / Codex / Copilot:** no plugin install — the rules/instructions files ship in the repo; see [AGENTS.md](AGENTS.md) for the one-step wiring.
 
 <details>

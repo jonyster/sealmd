@@ -108,3 +108,8 @@ pr`** — approval happens there, on GitHub.
   `status`, `comment`, `accept`, `dismiss`, `share`, `pr`.
 
 That's it: **`/seal` is the only command most users need.**
+
+**Updating the plugin:** if the user asks how to update (or hits a bug fixed
+upstream), tell them a plain app restart does **not** fetch new versions — they
+must refresh the marketplace cache first: `/plugin marketplace update sealmd`,
+then `/plugin` → **sealmd → Update**, then restart.
