@@ -116,6 +116,17 @@ test('renderMarkdown GFM task lists render disabled checkboxes', () => {
   assert.ok(out.includes('<li>plain</li>'));            // non-task item unchanged
 });
 
+test('renderMarkdown math: inline, block, fence -> MathML; prose $ stays text', () => {
+  const inline = renderMarkdown('Euler: $e^{i\\pi}+1=0$ done.');
+  assert.ok(inline.includes('<math'), 'inline math renders MathML');
+  const block = renderMarkdown('$$\\frac{1}{2}$$');
+  assert.ok(block.includes('<math') && block.includes('display="block"'), 'block math is display mode');
+  const fence = renderMarkdown('```math\n\\sum_{i=1}^n i\n```');
+  assert.ok(fence.includes('<math'), '```math fence renders MathML');
+  const prose = renderMarkdown('Costs $5 and $10 total.');
+  assert.ok(!prose.includes('<math') && prose.includes('$5'), 'lone $ amounts stay prose');
+});
+
 test('renderMarkdown emphasis inside paragraph', () => {
   const out = renderMarkdown('This is **strong** and *em* text.');
   assert.ok(out.includes('<strong>strong</strong>'));

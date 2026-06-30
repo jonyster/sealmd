@@ -23,14 +23,24 @@
 //     vs static "copy for agent" fallback
 //   - view/scroll/role persistence across the post-save (window.__sealReloading=true,location.reload())
 //
-// Zero dependencies, pure ESM, self-contained (inline CSS/JS, no network refs).
+// No npm/network deps: KaTeX is vendored (scripts/vendor/katex.mjs), pure ESM,
+// self-contained (inline CSS/JS, no network refs). Math renders to browser-native
+// MathML — no KaTeX CSS or webfonts shipped, so the artifact stays offline-safe.
 // system-ui font stack (Roboto first if locally installed; no webfont fetch).
 // ============================================================================
+
+import katex from './vendor/katex.mjs';
 
 export function escapeHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+// TeX -> MathML (self-contained, no CSS/fonts). throwOnError:false renders bad
+// input in-place; the catch falls back to the literal source if KaTeX blows up.
+function renderMath(tex, display) {
+  try { return katex.renderToString(tex, { output: 'mathml', displayMode: display, throwOnError: false }); }
+  catch { return escapeHtml((display ? '$$' : '$') + tex + (display ? '$$' : '$')); }
 }
 // Decode HTML entities to their characters so a title authored as "# &nbsp;X"
 // shows the space, not a literal "&nbsp;", once it passes back through escapeHtml.
@@ -50,6 +60,13 @@ export function renderInline(text) {
   let out = text.replace(/(`+)([^`]|[^`].*?[^`])\1(?!`)/g, (m, ticks, code) => {
     const token = ` CODE${codeSpans.length} `;
     codeSpans.push(`<code>${escapeHtml(code.trim())}</code>`);
+    return token;
+  });
+  // Inline math `$...$` — extract (as a code-span placeholder) before escaping so the
+  // raw MathML survives and the TeX source is not mangled. Guards keep `$5 and $10` prose.
+  out = out.replace(/\$(?!\s)((?:\\\$|[^$\n])+?)(?<!\s)\$/g, (m, tex) => {
+    const token = ` CODE${codeSpans.length} `;
+    codeSpans.push(renderMath(tex.replace(/\\\$/g, '$'), false));
     return token;
   });
   out = escapeHtml(out);
@@ -148,8 +165,21 @@ function mdBlockHtml(md) {
         if (close && close[2][0] === marker && close[2].length >= fenceLen) { i++; break; }
         code.push(lines[i]); i++;
       }
+      if (/^(math|latex|tex)$/i.test(lang)) { html.push(renderMath(code.join('\n').trim(), true)); continue; }
       const cls = lang ? ` class="language-${escapeHtml(lang)}"` : '';
       html.push(`<pre><code${cls}>${escapeHtml(code.join('\n'))}</code></pre>`); continue;
+    }
+    if (/^\s*\$\$/.test(line)) {
+      const body = line.replace(/^\s*\$\$/, '');
+      const single = body.match(/^(.*?)\$\$\s*$/);            // single-line $$ x $$
+      if (single && single[1].trim()) { html.push(renderMath(single[1].trim(), true)); i++; continue; }
+      const buf = body.trim() ? [body] : []; i++;             // multi-line until closing $$
+      while (i < lines.length) {
+        const close = lines[i].match(/^(.*?)\$\$\s*$/);
+        if (close) { if (close[1].trim()) buf.push(close[1]); i++; break; }
+        buf.push(lines[i]); i++;
+      }
+      html.push(renderMath(buf.join('\n').trim(), true)); continue;
     }
     const heading = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
     if (heading) { html.push(`<h${heading[1].length}>${renderInline(heading[2])}</h${heading[1].length}>`); i++; continue; }
@@ -182,6 +212,7 @@ function mdBlockHtml(md) {
       const l = lines[i];
       if (/^(#{1,6})\s+/.test(l)) break;
       if (/^(\s*)(`{3,}|~{3,})/.test(l)) break;
+      if (/^\s*\$\$/.test(l)) break;
       if (/^\s*>\s?/.test(l)) break;
       if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) break;
       if (/^(\s*)([-*+]|\d+[.)])\s+/.test(l)) break;
@@ -639,6 +670,7 @@ export function renderReviewPage({
   .summary h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--muted);margin:24px 0 4px}
   .task-list-item{list-style:none}
   .task-list-item input[type=checkbox]{margin:0 .4em 0 -1.1em;vertical-align:middle}
+  .katex-display,math[display=block]{display:block;margin:.8em 0;text-align:center;overflow-x:auto}
   .summary ul.keys{list-style:none;padding:0;margin:8px 0 0}
   .summary ul.keys li{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
   .summary ul.keys li .kk{color:var(--muted);min-width:152px;font-size:13px;padding-top:2px}
