@@ -108,6 +108,14 @@ test('renderMarkdown unordered + ordered lists', () => {
   assert.ok(ol.includes('<li>a</li>'));
 });
 
+test('renderMarkdown GFM task lists render disabled checkboxes', () => {
+  const out = renderMarkdown('- [ ] todo\n- [x] done\n- [X] also\n- plain');
+  assert.ok(out.includes('<li class="task-list-item"><input type="checkbox" disabled> todo</li>'));
+  assert.ok(out.includes('<li class="task-list-item"><input type="checkbox" disabled checked> done</li>'));
+  assert.ok(out.includes('<li class="task-list-item"><input type="checkbox" disabled checked> also</li>'));
+  assert.ok(out.includes('<li>plain</li>'));            // non-task item unchanged
+});
+
 test('renderMarkdown emphasis inside paragraph', () => {
   const out = renderMarkdown('This is **strong** and *em* text.');
   assert.ok(out.includes('<strong>strong</strong>'));

@@ -128,7 +128,11 @@ function mdBlockHtml(md) {
       const indent = m[1].length;
       if (indent < baseIndent) break;
       if (indent > baseIndent) { const nested = parseList(j); out = out.replace(/<\/li>$/, nested.html + '</li>'); j = nested.next; continue; }
-      out += `<li>${renderInline(m[3])}</li>`; j++;
+      const task = m[3].match(/^\[([ xX])\]\s+(.*)$/);
+      out += task
+        ? `<li class="task-list-item"><input type="checkbox" disabled${task[1] === ' ' ? '' : ' checked'}> ${renderInline(task[2])}</li>`
+        : `<li>${renderInline(m[3])}</li>`;
+      j++;
     }
     out += `</${tag}>`; return { html: out, next: j };
   }
@@ -633,6 +637,8 @@ export function renderReviewPage({
   .summary .lead{font-size:18px;line-height:1.55;color:var(--ink);margin:16px 0 0;font-weight:400}
   .summary .lead b,.summary .lead strong{font-weight:600}
   .summary h3{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--muted);margin:24px 0 4px}
+  .task-list-item{list-style:none}
+  .task-list-item input[type=checkbox]{margin:0 .4em 0 -1.1em;vertical-align:middle}
   .summary ul.keys{list-style:none;padding:0;margin:8px 0 0}
   .summary ul.keys li{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
   .summary ul.keys li .kk{color:var(--muted);min-width:152px;font-size:13px;padding-top:2px}
