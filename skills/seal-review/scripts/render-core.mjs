@@ -630,6 +630,66 @@ export function renderReviewPage({
   body.view-full .page{display:block}
   .rail{width:312px;flex-shrink:0;position:relative}
   .railhdr{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 10px;font-weight:600}
+
+  /* ================= IDE 3-panel layout (default) =================
+     Summary (sticky LEFT) · live doc (CENTER) · rail (RIGHT), all visible at once.
+     Reuses the existing #docSummary / #page / .rail nodes. */
+  body.view-ide .canvas-area{justify-content:flex-start;align-items:flex-start;max-width:1480px;--ide-sumw:360px;--ide-railw:312px}
+  body.view-ide .workspace{overflow:visible}       /* let the window scroll so the summary can pin */
+  body.view-ide .pagecol{display:flex;gap:28px;width:auto;flex:1 1 auto;min-width:0;position:relative}
+  body.view-ide .summary{display:block;flex:0 0 var(--ide-sumw);width:var(--ide-sumw);position:sticky;top:24px;align-self:flex-start;max-height:calc(100vh - 48px);overflow-y:auto}
+  body.view-ide .page{display:block;flex:1 1 auto;min-width:0}
+  body.view-ide .rail{flex:0 0 var(--ide-railw);width:var(--ide-railw)}
+  body.view-ide #viewSeg{display:none}             /* both panels always shown — view tabs are redundant */
+  /* drag-resize splitter at the summary/doc boundary (lives in .pagecol, not inside the
+     overflow:auto summary which would clip the handle) */
+  .ide-rz{display:none}
+  body.view-ide .ide-rz{display:block;position:absolute;top:0;bottom:0;width:16px;cursor:col-resize;z-index:7;touch-action:none;left:calc(var(--ide-sumw) + 6px)}
+  body.view-ide .ide-rz::after{content:"";position:absolute;top:0;bottom:0;left:50%;width:2px;transform:translateX(-50%);background:var(--line);transition:background .12s ease}
+  body.view-ide .ide-rz:hover::after,body.view-ide .ide-rz.drag::after{background:var(--seal)}
+  body.view-ide .ide-rz:focus-visible{outline:2px solid var(--seal);outline-offset:-2px}
+  body.view-ide.hide-summary .ide-rz,body.view-ide.maxed .ide-rz{display:none}
+  body.resizing{cursor:col-resize;user-select:none}
+  @media (max-width:1100px){
+    body.view-ide .ide-rz{display:none}
+    body.view-ide .pagecol{flex-direction:column;align-items:stretch}
+    body.view-ide .summary{position:static;width:100%;flex:none;max-height:none}
+    body.view-ide .panel-toggles{display:none}
+  }
+  /* panel toggles (VS-Code style) in the mode banner */
+  .panel-toggles{display:none}
+  body.view-ide .panel-toggles{display:inline-flex;align-items:center;gap:2px;margin-right:8px;padding-right:10px;border-right:1px solid var(--line)}
+  .ptg{width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:var(--r-sm);background:transparent;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .12s ease,color .12s ease}
+  .ptg svg{width:18px;height:18px}
+  .ptg:hover{background:var(--fill);color:var(--ink-soft)}
+  .ptg[aria-pressed="true"]{color:var(--ink-soft)}
+  .ptg .fp{opacity:0;transition:opacity .12s ease}
+  .ptg[aria-pressed="true"] .fp{opacity:.22}
+  .ptg:focus-visible{outline:2px solid var(--seal);outline-offset:2px}
+  body.view-ide.hide-summary .summary{display:none}
+  body.view-ide.hide-rail .rail{display:none}
+  /* per-panel maximize / restore */
+  .ide-max{display:none}
+  body.view-ide .ide-max{display:inline-flex;position:absolute;top:10px;right:10px;z-index:6;width:26px;height:26px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--paper);color:var(--muted);cursor:pointer;align-items:center;justify-content:center;opacity:.42;transition:opacity .12s,color .12s,background .12s}
+  body.view-ide .summary:hover .ide-max,body.view-ide .page:hover .ide-max,body.view-ide .rail:hover .ide-max,body.view-ide .ide-max:focus-visible{opacity:1}
+  body.view-ide .ide-max:hover{color:var(--ink-soft);background:var(--fill)}
+  body.view-ide .ide-max svg{width:15px;height:15px}
+  body.view-ide .ide-max .mn-i,body.view-ide .ide-max .ide-max-lbl{display:none}
+  body.view-ide.maxed .ide-max .mx-i{display:none}
+  body.view-ide.maxed .ide-max .mn-i{display:inline-flex}
+  /* full-screen: an obvious, always-visible "Exit full screen" pill below the chrome */
+  body.view-ide.maxed .ide-max{position:fixed;top:124px;right:24px;z-index:60;width:auto;height:32px;padding:0 13px;gap:7px;opacity:1;font:inherit;font-size:12px;font-weight:600;color:var(--ink-soft);background:var(--paper);border-color:var(--line-strong);box-shadow:0 2px 10px rgba(0,0,0,.22)}
+  body.view-ide.maxed .ide-max .ide-max-lbl{display:inline}
+  body.view-ide.maxed .ide-max:hover{color:var(--ink);background:var(--fill)}
+  body.view-ide.maxed .canvas-area{justify-content:center}
+  body.view-ide.maxed .summary,body.view-ide.maxed .page,body.view-ide.maxed .rail{display:none}
+  body.view-ide.max-summary .summary{display:block;flex:none;width:100%;max-width:860px;margin:0 auto;position:relative}
+  body.view-ide.max-doc .page{display:block;max-width:900px;margin:0 auto}
+  body.view-ide.max-rail .pagecol{display:none}
+  body.view-ide.max-rail .rail{display:block;width:100%;max-width:760px;margin:0 auto}
+  /* the rail is a fixed reading column — no maximize handle (only summary + doc expand/resize) */
+  body.view-ide .rail > .ide-max,body.view-ide .rail > .ide-rz{display:none}
+  /* ================= end IDE layout ================= */
   /* document typography */
   .page :is(h1,h2,h3,h4,p,li,td,th){font-family:var(--font-sans)}
   .page h1{font-size:28px;font-weight:500;margin:0 0 6px;color:var(--ink);letter-spacing:-.02em;line-height:1.25}
@@ -640,8 +700,12 @@ export function renderReviewPage({
   .page strong{color:var(--ink);font-weight:600}
   .page ul,.page ol{margin:8px 0;padding-left:24px}
   .page li{font-size:16px;line-height:1.7;color:var(--ink-soft);margin:4px 0;max-width:70ch}
-  .page table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px}
-  .page th,.page td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  /* Wide tables scroll horizontally instead of squeezing every cell into a tall
+     word-per-line stack (block + max-content + overflow-x). */
+  .page table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;width:max-content;max-width:100%;
+    border-collapse:collapse;margin:12px 0;font-size:13px}
+  .page th,.page td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top;min-width:150px;max-width:320px}
+  .page td:first-child,.page th:first-child{min-width:96px}
   .page th{background:var(--panel);font-weight:600;font-size:12px;color:var(--ink)}
   .page blockquote{border-left:3px solid var(--seal-line);background:var(--seal-soft);margin:12px 0;padding:8px 16px;color:var(--ink-soft);border-radius:0 var(--r-sm) var(--r-sm) 0}
   .page hr{border:0;border-top:1px solid var(--line);margin:24px 0}
@@ -940,7 +1004,7 @@ export function renderReviewPage({
     .canvas-area{padding:16px 8px 150px;gap:16px}
   }
 </style></head>
-<body class="mode-view view-summary${hasDisposed ? ' cf-open' : ''}">
+<body class="mode-view view-ide${hasDisposed ? ' cf-open' : ''}">
 <div class="chrome" id="chrome">
   <header class="top">
     <div class="row">
@@ -969,6 +1033,10 @@ export function renderReviewPage({
     <button class="sn-x" id="nudgeDismiss" type="button" aria-label="Dismiss">&times;</button>
   </div>` : ''}
   <div class="modebanner" id="modeBanner">
+    <div class="panel-toggles">
+      <button class="ptg" id="tgSummary" type="button" aria-pressed="true" aria-label="Toggle summary panel" title="Summary panel (⌘⌥B · Ctrl+Alt+B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="9" y1="5" x2="9" y2="19"/><rect class="fp" x="3.8" y="5.8" width="4.4" height="12.4" rx="1" fill="currentColor" stroke="none"/></svg></button>
+      <button class="ptg" id="tgRail" type="button" aria-pressed="true" aria-label="Toggle activity panel" title="Activity panel (⌘⌥K · Ctrl+Alt+K)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="15" y1="5" x2="15" y2="19"/><rect class="fp" x="15.8" y="5.8" width="4.4" height="12.4" rx="1" fill="currentColor" stroke="none"/></svg></button>
+    </div>
     <div class="seg" id="viewSeg">
       <button data-view="summary" class="on">Summary</button>
       <button data-view="full">Full doc</button>
@@ -980,8 +1048,9 @@ export function renderReviewPage({
 <div class="workspace" id="workspace">
   <div class="canvas-area">
     <div class="pagecol">
-      <section class="summary" id="docSummary">${summaryHtml}</section>
-      <article class="page" id="page">${fullHtml}</article>
+      <section class="summary" id="docSummary"><button class="ide-max" data-max="summary" type="button" aria-label="Expand summary panel" title="Expand / restore panel (Esc)"><svg class="mx-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg><svg class="mn-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg><span class="ide-max-lbl">Exit full screen</span></button>${summaryHtml}</section>
+      <article class="page" id="page"><button class="ide-max" data-max="doc" type="button" aria-label="Expand document panel" title="Expand / restore panel (Esc)"><svg class="mx-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg><svg class="mn-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></svg><span class="ide-max-lbl">Exit full screen</span></button>${fullHtml}</article>
+      <div class="ide-rz" data-rz="sum" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Resize summary panel"></div>
     </div>
     <aside class="rail">
       <div class="railseg" id="railSeg">
@@ -1070,6 +1139,13 @@ var body=document.body, page=document.getElementById('page'),
 
 // ---- view toggle (persist so post-save reload doesn't jump to Summary) ----
 function setView(v){
+  // In the IDE 3-panel layout the summary + doc are BOTH always visible, so a view
+  // switch never changes the layout — it only runs the full-doc side effects (anchor
+  // highlighting / card alignment) that other code triggers via setView('full').
+  if(body.classList.contains('view-ide')){
+    if(v==='full'){highlightAnchors();scheduleAlign();markReferencedBlocks();}
+    return;
+  }
   document.querySelectorAll('#viewSeg button').forEach(x=>x.classList.toggle('on',x.dataset.view===v));
   body.classList.remove('view-summary','view-full','view-md');body.classList.add('view-'+v);
   try{sessionStorage.setItem('seal-view',v)}catch(e){}
@@ -1079,6 +1155,80 @@ function setView(v){
 }
 document.getElementById('viewSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setView(b.dataset.view);});
 {const tf=document.getElementById('cmtToFull');if(tf)tf.onclick=()=>setView('full');}
+
+// ===== IDE 3-panel: panel toggles, maximize (URL-synced), drag-resize — all persisted =====
+(function(){
+  if(!body.classList.contains('view-ide')) return;
+  var canvas=document.querySelector('.canvas-area');
+  function lsGet(k){ try{ return localStorage.getItem('seal.ide.'+k); }catch(_){ return null; } }
+  function lsSet(k,v){ try{ localStorage.setItem('seal.ide.'+k, v); }catch(_){} }
+  function clamp(x,lo,hi){ return Math.max(lo, Math.min(hi, x)); }
+  // -- panel show/hide (persist globally across docs) --
+  function setPanelHidden(which, hidden){
+    body.classList.toggle(which==='summary'?'hide-summary':'hide-rail', hidden);
+    var b=document.getElementById(which==='summary'?'tgSummary':'tgRail');
+    if(b) b.setAttribute('aria-pressed', String(!hidden));
+    lsSet(which==='summary'?'hideSummary':'hideRail', hidden?'1':'0');
+  }
+  function togglePanel(which){ setPanelHidden(which, !body.classList.contains(which==='summary'?'hide-summary':'hide-rail')); }
+  var tgS=document.getElementById('tgSummary'), tgR=document.getElementById('tgRail');
+  if(tgS) tgS.addEventListener('click', function(){ togglePanel('summary'); });
+  if(tgR) tgR.addEventListener('click', function(){ togglePanel('rail'); });
+  if(lsGet('hideSummary')==='1') setPanelHidden('summary', true);
+  if(lsGet('hideRail')==='1') setPanelHidden('rail', true);
+  // -- maximize / restore, reflected in ?max= so browser Back exits full screen --
+  function applyMax(which){
+    body.classList.remove('maxed','max-summary','max-doc','max-rail');
+    if(which){ body.classList.add('maxed','max-'+which); }
+  }
+  function currentMax(){ return body.classList.contains('max-summary')?'summary':body.classList.contains('max-doc')?'doc':null; }
+  function toggleMax(which){
+    if(currentMax()===which){
+      if(history.state && history.state.sealMax){ history.back(); return; }
+      applyMax(null);
+      var u0=new URL(location.href); u0.searchParams.delete('max'); history.replaceState({}, '', u0); return;
+    }
+    applyMax(which);
+    var u=new URL(location.href); u.searchParams.set('max', which);
+    history.pushState({sealMax:which}, '', u);
+  }
+  function restoreMax(){ var w=currentMax(); if(w) toggleMax(w); }
+  window.addEventListener('popstate', function(e){
+    var which=(e.state && e.state.sealMax) || new URL(location.href).searchParams.get('max') || null;
+    applyMax(which==='summary'||which==='doc' ? which : null);
+  });
+  document.addEventListener('click', function(e){
+    var mb=e.target.closest('.ide-max'); if(!mb) return; e.preventDefault(); toggleMax(mb.getAttribute('data-max'));
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape' && body.classList.contains('maxed')){ restoreMax(); return; }
+    if((e.metaKey||e.ctrlKey) && e.altKey){
+      if(e.code==='KeyB'){ e.preventDefault(); togglePanel('summary'); }
+      else if(e.code==='KeyK'){ e.preventDefault(); togglePanel('rail'); }
+    }
+  });
+  (function(){ var m=new URL(location.href).searchParams.get('max'); if(m==='summary'||m==='doc') applyMax(m); })();
+  // -- drag / keyboard resize of the summary width (persist globally) --
+  if(canvas){
+    var saved=parseInt(lsGet('sumw'),10);
+    if(saved) canvas.style.setProperty('--ide-sumw', clamp(saved,280,560)+'px');
+    function px(v){ return parseInt(getComputedStyle(canvas).getPropertyValue(v),10) || 0; }
+    var rz=document.querySelector('.ide-rz[data-rz="sum"]');
+    if(rz){
+      function setW(w){ var cw=clamp(w,280,560); canvas.style.setProperty('--ide-sumw', cw+'px'); lsSet('sumw', cw); }
+      rz.addEventListener('mousedown', function(e){
+        e.preventDefault(); var sx=e.clientX, sw=px('--ide-sumw');
+        rz.classList.add('drag'); body.classList.add('resizing');
+        function mv(ev){ setW(sw + (ev.clientX - sx)); }
+        function up(){ rz.classList.remove('drag'); body.classList.remove('resizing'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+        document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+      });
+      rz.addEventListener('keydown', function(e){ var d=e.key==='ArrowLeft'?-16:(e.key==='ArrowRight'?16:0); if(!d) return; e.preventDefault(); setW(px('--ide-sumw')+d); });
+    }
+  }
+  // doc is always visible in IDE — run the full-view side effects once on load
+  try{ highlightAnchors(); scheduleAlign(); markReferencedBlocks(); }catch(_){}
+})();
 
 // ---- rail pane toggle ----
 function setPane(name){
