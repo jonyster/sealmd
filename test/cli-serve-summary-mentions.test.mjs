@@ -19,7 +19,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { makeWorkspace, initWorkspace, runSeal, SEAL, sealToken } from './helper.mjs';
+import { makeWorkspace, initWorkspace, runSeal, SEAL, sealToken, SAMPLE_DOC } from './helper.mjs';
 
 // ---------------------------------------------------------------------------
 // local helpers (NOT added to the shared harness — parallel authors race on it)
@@ -478,6 +478,11 @@ test('serve: GET / returns the live review HTML; /api/state is an online heartbe
       const state = await fetch(base + '/api/state').then((r) => r.json());
       assert.equal(state.ok, true);
       assert.equal(state.comments, 0);
+      // hash drives the client auto-refresh: it must be present and track doc.md edits
+      assert.match(state.hash || '', /^[0-9a-f]{64}$/, 'state carries the live content hash');
+      ws.write('doc.md', SAMPLE_DOC + '\n## New section\nEdited on disk.\n');
+      const after = await fetch(base + '/api/state').then((r) => r.json());
+      assert.notEqual(after.hash, state.hash, 'editing doc.md changes the reported hash');
     });
   } finally { ws.cleanup(); }
 });
